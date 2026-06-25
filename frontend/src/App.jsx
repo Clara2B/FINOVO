@@ -1531,6 +1531,7 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
   const [mapVal,      setMapVal]      = useState(-1);
   const [mapCat,      setMapCat]      = useState(-1);
   const [mapAccCol,   setMapAccCol]   = useState(-1);  // coluna com nome da conta
+  const [mapCCCol,    setMapCCCol]    = useState(-1);  // coluna com nome do centro de custo
   const [mapParcelas, setMapParcelas] = useState(-1);  // coluna com qtd de parcelas
   const [mapAcc,      setMapAcc]      = useState(accounts[0]?.id || "");
   const [skipKw,      setSkipKw]      = useState("SALDO,TOTAL,PAGAMENTO,ANTERIOR");
@@ -1559,6 +1560,8 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
 
   const parseDt = raw => {
     if (!raw) return tod();
+    // SheetJS com cellDates:true pode retornar objeto Date
+    if (raw instanceof Date) return isNaN(raw) ? tod() : raw.toISOString().slice(0, 10);
     const s = String(raw).trim();
     if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
     const m1 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
@@ -1582,7 +1585,7 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
     setFilename(""); setError(""); setHeaders([]); setRawRows([]);
     setRows([]); setDone(null);
     setMapDate(-1); setMapDesc(-1); setMapVal(-1); setMapCat(-1);
-    setMapAccCol(-1); setMapParcelas(-1);
+    setMapAccCol(-1); setMapCCCol(-1); setMapParcelas(-1);
     setPdfStatus("idle"); setPdfErr(""); setPdfRows([]); setPdfInfo(null);
   };
 
@@ -1614,18 +1617,19 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
         // auto-detect columns
         const lw  = hdr.map(h => h.toLowerCase());
         const find = (...terms) => { for (const t of terms) { const i = lw.findIndex(h => h.includes(t)); if (i >= 0) return i; } return -1; };
-        const d  = find("data","date","dt","dia","vencim");
+        const d  = find("vencim","data","date","dt","dia");
         const ds = find("descri","histor","lancam","memo","estabele","merchant","benefic","nome","título");
         const vl = find("valor","value","amount","débito","debito","crédito","credito","montante","transac");
         const ct = find("categ","grupo","group","classif");
         const ac = find("conta","bank","account","banco");
-        const pr = find("parcela","vezes","installment","recorr");
+        const cc = find("centro","custo","cost","depart");
+        const pr = find("parcela","vezes","quantas","installment");
         setMapDate(d); setMapDesc(ds); setMapVal(vl); setMapCat(ct);
-        setMapAccCol(ac); setMapParcelas(pr);
+        setMapAccCol(ac); setMapCCCol(cc); setMapParcelas(pr);
 
         // apply mapping immediately if found
         if (d >= 0 && ds >= 0 && vl >= 0) {
-          applyMapping(body, hdr, d, ds, vl, ct, ac, pr);
+          applyMapping(body, hdr, d, ds, vl, ct, ac, cc, pr);
         }
       } catch(err) {
         setError("Erro ao ler arquivo: " + err.message);
@@ -1636,8 +1640,25 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
   };
 
   // ── SHEET: build preview rows from mapping ──
-  const applyMapping = (body, hdr, mD, mDs, mV, mC, mAc, mPr) => {
+  const applyMapping = (body, hdr, mD, mDs, mV, mC, mAc, mCC, mPr) => {
     const skip = skipKw.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+
+    // resolve nome → id (case-insensitive, partial match fallback)
+    const resolveAcc = name => {
+      if (!name) return mapAcc;
+      const n = name.toLowerCase().trim();
+      return (accounts.find(a => a.name.toLowerCase().trim() === n)
+           || accounts.find(a => a.name.toLowerCase().includes(n) || n.includes(a.name.toLowerCase())))
+             ?.id ?? mapAcc;
+    };
+    const resolveCC = name => {
+      if (!name) return "";
+      const n = name.toLowerCase().trim();
+      return ((costCenters||[]).find(c => c.name.toLowerCase().trim() === n)
+           || (costCenters||[]).find(c => c.name.toLowerCase().includes(n) || n.includes(c.name.toLowerCase())))
+             ?.id ?? "";
+    };
+
     const built = [];
     (body || rawRows).forEach((row, i) => {
       const descRaw = String(row[mDs] ?? "").trim();
@@ -1645,21 +1666,24 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
       if (skip.some(sw => descRaw.toLowerCase().includes(sw))) return;
       const amt = parseAmt(String(row[mV] ?? ""));
       if (amt === null || amt === 0) return;
-      const parcelas = mPr >= 0 ? (parseInt(String(row[mPr] ?? "").trim()) || 1) : 1;
+      const parcelas   = mPr  >= 0 ? (parseInt(String(row[mPr]  ?? "").trim()) || 1) : 1;
+      const accName    = mAc  >= 0 ? String(row[mAc]  ?? "").trim() : "";
+      const ccName     = mCC  >= 0 ? String(row[mCC]  ?? "").trim() : "";
       built.push({
-        _idx:        i,
-        id:          uid(),
-        keep:        true,
-        date:        parseDt(row[mD]),
-        desc:        descRaw,
-        amount:      Math.abs(amt),
-        type:        itype,
-        category:    mC  >= 0 ? (String(row[mC]  ?? "").trim() || "Outros") : "Outros",
-        accountName: mAc >= 0 ? (String(row[mAc] ?? "").trim())             : "",
-        costCenterId: "",
-        status:      "pendente",
-        accountId:   mapAcc,
-        parcelas:    Math.min(Math.max(parcelas, 1), 60),
+        _idx:         i,
+        id:           uid(),
+        keep:         true,
+        date:         parseDt(row[mD]),
+        desc:         descRaw,
+        amount:       Math.abs(amt),
+        type:         itype,
+        category:     mC >= 0 ? (String(row[mC] ?? "").trim() || "Outros") : "Outros",
+        accountId:    resolveAcc(accName),
+        accountName:  accName,
+        costCenterId: resolveCC(ccName),
+        costCenterName: ccName,
+        status:       "pendente",
+        parcelas:     Math.min(Math.max(parcelas, 1), 60),
       });
     });
     setRows(built);
@@ -1672,7 +1696,7 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
       return;
     }
     setError("");
-    applyMapping(rawRows, headers, mapDate, mapDesc, mapVal, mapCat, mapAccCol, mapParcelas);
+    applyMapping(rawRows, headers, mapDate, mapDesc, mapVal, mapCat, mapAccCol, mapCCCol, mapParcelas);
   };
 
   const updateRow  = (id, field, value) => setRows(rs => rs.map(r => r.id === id ? {...r, [field]: value} : r));
@@ -1704,26 +1728,17 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
 
   // ── SHEET: confirm import ───────────────────
   const confirmImport = () => {
-    // helper: adiciona N meses a uma data ISO
     const addMonths = (iso, n) => {
       const d = new Date(iso + "T12:00:00Z");
       d.setUTCMonth(d.getUTCMonth() + n);
       return d.toISOString().slice(0, 10);
-    };
-    // helper: tenta resolver nome da conta para um ID
-    const resolveAccId = (name) => {
-      if (!name) return mapAcc;
-      const norm = name.toLowerCase().trim();
-      const match = accounts.find(a => a.name.toLowerCase().trim() === norm);
-      return match ? match.id : mapAcc;
     };
 
     const toImport = [];
     rows.filter(r => r.keep).forEach(r => {
       const amt = parseFloat(r.amount) || 0;
       if (amt <= 0 || !r.desc) return;
-      const total = r.parcelas || 1;
-      const accId = r.rowAccountId || resolveAccId(r.accountName);
+      const total   = r.parcelas || 1;
       const groupId = total > 1 ? uid() : null;
       for (let idx = 0; idx < total; idx++) {
         toImport.push({
@@ -1734,7 +1749,7 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
           category:             r.category,
           date:                 addMonths(r.date, idx),
           status:               idx === 0 ? r.status : "pendente",
-          accountId:            accId,
+          accountId:            r.accountId || mapAcc,
           costCenterId:         r.costCenterId || "",
           contactId:            "",
           recurrenceGroupId:    groupId,
@@ -1953,12 +1968,13 @@ Regras: amount sempre positivo; ignore linhas de saldo/pagamento mínimo/encargo
               {/* Selects — linha 1: colunas obrigatórias + opcionais */}
               <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:12}}>
                 {[
-                  ["📅 Vencimento *", mapDate,     setMapDate    ],
-                  ["📝 Descrição *",  mapDesc,     setMapDesc    ],
-                  ["💰 Valor *",      mapVal,      setMapVal     ],
-                  ["🏷️ Categoria",   mapCat,      setMapCat     ],
-                  ["🏦 Conta (coluna)",mapAccCol,  setMapAccCol  ],
-                  ["🔢 Parcelas",     mapParcelas, setMapParcelas],
+                  ["📅 Vencimento *",   mapDate,     setMapDate    ],
+                  ["📝 Descrição *",    mapDesc,     setMapDesc    ],
+                  ["💰 Valor *",        mapVal,      setMapVal     ],
+                  ["🏷️ Categoria",     mapCat,      setMapCat     ],
+                  ["🏦 Conta (coluna)", mapAccCol,   setMapAccCol  ],
+                  ["🏢 Centro de Custo",mapCCCol,    setMapCCCol   ],
+                  ["🔢 Parcelas",       mapParcelas, setMapParcelas],
                 ].map(([label,val,setter])=>(
                   <div key={label} style={{display:"flex",flexDirection:"column",gap:5}}>
                     <label style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{label}</label>
@@ -2207,7 +2223,7 @@ Regras: amount sempre positivo; ignore linhas de saldo/pagamento mínimo/encargo
                         </td>
                         {/* Conta bancária por linha */}
                         <td style={{padding:"8px 6px"}}>
-                          <select value={row.rowAccountId||row.accountId||mapAcc} onChange={e=>updateRow(row.id,"rowAccountId",e.target.value)}
+                          <select value={row.accountId||mapAcc} onChange={e=>updateRow(row.id,"accountId",e.target.value)}
                             style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:6,
                                     color:C.muted,fontFamily:"inherit",fontSize:12,padding:"3px 6px",outline:"none",cursor:"pointer",maxWidth:110}}>
                             {accounts.map(a=><option key={a.id} value={a.id}>{a.name.length>14?a.name.slice(0,13)+"…":a.name}</option>)}
