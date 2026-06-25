@@ -407,13 +407,17 @@ router.post("/import", async (req, res) => {
       const result = await client.query(
         `INSERT INTO transactions
           (organization_id, "desc", amount, type, category, date, status,
-           account_id, cost_center_id, notes, source, import_batch_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'import',$11)
+           account_id, cost_center_id, notes, source, import_batch_id,
+           recurrence_group_id, recurrence_index, recurrence_total)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'import',$11,$12,$13,$14)
          RETURNING *`,
         [
           req.user.organizationId, r.desc, r.amount, r.type, r.category, r.date,
           r.status || "pendente", r.accountId || null, r.costCenterId || null,
           r.notes || null, finalBatchId,
+          r.recurrenceGroupId || null,
+          r.recurrenceIndex   || null,
+          r.recurrenceTotal   || null,
         ]
       );
       created.push(result.rows[0]);

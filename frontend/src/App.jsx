@@ -1526,12 +1526,14 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
   // Sheet parsing
   const [headers,  setHeaders]  = useState([]);  // ["Data","Desc","Valor",...]
   const [rawRows,  setRawRows]  = useState([]);  // raw string rows
-  const [mapDate,  setMapDate]  = useState(-1);
-  const [mapDesc,  setMapDesc]  = useState(-1);
-  const [mapVal,   setMapVal]   = useState(-1);
-  const [mapCat,   setMapCat]   = useState(-1);
-  const [mapAcc,   setMapAcc]   = useState(accounts[0]?.id || "");
-  const [skipKw,   setSkipKw]   = useState("SALDO,TOTAL,PAGAMENTO,ANTERIOR");
+  const [mapDate,     setMapDate]     = useState(-1);
+  const [mapDesc,     setMapDesc]     = useState(-1);
+  const [mapVal,      setMapVal]      = useState(-1);
+  const [mapCat,      setMapCat]      = useState(-1);
+  const [mapAccCol,   setMapAccCol]   = useState(-1);  // coluna com nome da conta
+  const [mapParcelas, setMapParcelas] = useState(-1);  // coluna com qtd de parcelas
+  const [mapAcc,      setMapAcc]      = useState(accounts[0]?.id || "");
+  const [skipKw,      setSkipKw]      = useState("SALDO,TOTAL,PAGAMENTO,ANTERIOR");
 
   // Preview / edit rows (after mapping applied)
   const [rows,     setRows]     = useState([]); // {id,date,desc,amount,type,category,keep}
@@ -1564,6 +1566,14 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
       const y = m1[3].length === 2 ? "20" + m1[3] : m1[3];
       return `${y}-${m1[2].padStart(2,"0")}-${m1[1].padStart(2,"0")}`;
     }
+    // Serial Excel (ex: 46178) — époc 1899-12-30
+    if (/^\d{4,5}$/.test(s)) {
+      const n = parseInt(s);
+      if (n > 40000 && n < 60000) {
+        const d = new Date(Date.UTC(1899, 11, 30) + n * 86400000);
+        return d.toISOString().slice(0, 10);
+      }
+    }
     const d = new Date(s);
     return isNaN(d) ? tod() : d.toISOString().slice(0, 10);
   };
@@ -1571,6 +1581,8 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
   const reset = () => {
     setFilename(""); setError(""); setHeaders([]); setRawRows([]);
     setRows([]); setDone(null);
+    setMapDate(-1); setMapDesc(-1); setMapVal(-1); setMapCat(-1);
+    setMapAccCol(-1); setMapParcelas(-1);
     setPdfStatus("idle"); setPdfErr(""); setPdfRows([]); setPdfInfo(null);
   };
 
@@ -1606,11 +1618,14 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
         const ds = find("descri","histor","lancam","memo","estabele","merchant","benefic","nome","título");
         const vl = find("valor","value","amount","débito","debito","crédito","credito","montante","transac");
         const ct = find("categ","grupo","group","classif");
+        const ac = find("conta","bank","account","banco");
+        const pr = find("parcela","vezes","installment","recorr");
         setMapDate(d); setMapDesc(ds); setMapVal(vl); setMapCat(ct);
+        setMapAccCol(ac); setMapParcelas(pr);
 
         // apply mapping immediately if found
         if (d >= 0 && ds >= 0 && vl >= 0) {
-          applyMapping(body, hdr, d, ds, vl, ct);
+          applyMapping(body, hdr, d, ds, vl, ct, ac, pr);
         }
       } catch(err) {
         setError("Erro ao ler arquivo: " + err.message);
@@ -1621,7 +1636,7 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
   };
 
   // ── SHEET: build preview rows from mapping ──
-  const applyMapping = (body, hdr, mD, mDs, mV, mC) => {
+  const applyMapping = (body, hdr, mD, mDs, mV, mC, mAc, mPr) => {
     const skip = skipKw.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
     const built = [];
     (body || rawRows).forEach((row, i) => {
@@ -1630,18 +1645,21 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
       if (skip.some(sw => descRaw.toLowerCase().includes(sw))) return;
       const amt = parseAmt(String(row[mV] ?? ""));
       if (amt === null || amt === 0) return;
+      const parcelas = mPr >= 0 ? (parseInt(String(row[mPr] ?? "").trim()) || 1) : 1;
       built.push({
-        _idx:     i,
-        id:       uid(),
-        keep:     true,
-        date:     parseDt(row[mD]),
-        desc:     descRaw,
-        amount:   Math.abs(amt),
-        type:     itype,
-        category: mC >= 0 ? (String(row[mC] ?? "").trim() || "Outros") : "Outros",
+        _idx:        i,
+        id:          uid(),
+        keep:        true,
+        date:        parseDt(row[mD]),
+        desc:        descRaw,
+        amount:      Math.abs(amt),
+        type:        itype,
+        category:    mC  >= 0 ? (String(row[mC]  ?? "").trim() || "Outros") : "Outros",
+        accountName: mAc >= 0 ? (String(row[mAc] ?? "").trim())             : "",
         costCenterId: "",
-        status:   "pago",
-        accountId: mapAcc,
+        status:      "pendente",
+        accountId:   mapAcc,
+        parcelas:    Math.min(Math.max(parcelas, 1), 60),
       });
     });
     setRows(built);
@@ -1654,7 +1672,7 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
       return;
     }
     setError("");
-    applyMapping(rawRows, headers, mapDate, mapDesc, mapVal, mapCat);
+    applyMapping(rawRows, headers, mapDate, mapDesc, mapVal, mapCat, mapAccCol, mapParcelas);
   };
 
   const updateRow  = (id, field, value) => setRows(rs => rs.map(r => r.id === id ? {...r, [field]: value} : r));
@@ -1686,24 +1704,47 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
 
   // ── SHEET: confirm import ───────────────────
   const confirmImport = () => {
-    const toImport = rows
-      .filter(r => r.keep)
-      .map(r => ({
-        id:         r.id,
-        desc:       r.desc,
-        amount:     parseFloat(r.amount) || 0,
-        type:       r.type,
-        category:   r.category,
-        date:       r.date,
-        status:     r.status,
-        accountId:  mapAcc,
-        costCenterId: r.costCenterId || "",
-        contactId:  "",
-        recurrence: "none",
-        notes:      "",
-        source:     filename,
-      }))
-      .filter(r => r.amount > 0 && r.desc);
+    // helper: adiciona N meses a uma data ISO
+    const addMonths = (iso, n) => {
+      const d = new Date(iso + "T12:00:00Z");
+      d.setUTCMonth(d.getUTCMonth() + n);
+      return d.toISOString().slice(0, 10);
+    };
+    // helper: tenta resolver nome da conta para um ID
+    const resolveAccId = (name) => {
+      if (!name) return mapAcc;
+      const norm = name.toLowerCase().trim();
+      const match = accounts.find(a => a.name.toLowerCase().trim() === norm);
+      return match ? match.id : mapAcc;
+    };
+
+    const toImport = [];
+    rows.filter(r => r.keep).forEach(r => {
+      const amt = parseFloat(r.amount) || 0;
+      if (amt <= 0 || !r.desc) return;
+      const total = r.parcelas || 1;
+      const accId = r.rowAccountId || resolveAccId(r.accountName);
+      const groupId = total > 1 ? uid() : null;
+      for (let idx = 0; idx < total; idx++) {
+        toImport.push({
+          id:                   uid(),
+          desc:                 total > 1 ? `${r.desc} (${idx + 1}/${total})` : r.desc,
+          amount:               amt,
+          type:                 r.type,
+          category:             r.category,
+          date:                 addMonths(r.date, idx),
+          status:               idx === 0 ? r.status : "pendente",
+          accountId:            accId,
+          costCenterId:         r.costCenterId || "",
+          contactId:            "",
+          recurrenceGroupId:    groupId,
+          recurrenceIndex:      total > 1 ? idx + 1 : null,
+          recurrenceTotal:      total > 1 ? total   : null,
+          notes:                "",
+          source:               filename,
+        });
+      }
+    });
 
     if (toImport.length === 0) { setError("Nenhuma linha válida selecionada."); return; }
     const result = onImport(toImport);
@@ -1909,13 +1950,15 @@ Regras: amount sempre positivo; ignore linhas de saldo/pagamento mínimo/encargo
                 </table>
               </div>
 
-              {/* Selects */}
-              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:12}}>
+              {/* Selects — linha 1: colunas obrigatórias + opcionais */}
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:12}}>
                 {[
-                  ["📅 Data *",      mapDate, setMapDate],
-                  ["📝 Descrição *", mapDesc, setMapDesc],
-                  ["💰 Valor *",     mapVal,  setMapVal ],
-                  ["🏷️ Categoria",  mapCat,  setMapCat ],
+                  ["📅 Vencimento *", mapDate,     setMapDate    ],
+                  ["📝 Descrição *",  mapDesc,     setMapDesc    ],
+                  ["💰 Valor *",      mapVal,      setMapVal     ],
+                  ["🏷️ Categoria",   mapCat,      setMapCat     ],
+                  ["🏦 Conta (coluna)",mapAccCol,  setMapAccCol  ],
+                  ["🔢 Parcelas",     mapParcelas, setMapParcelas],
                 ].map(([label,val,setter])=>(
                   <div key={label} style={{display:"flex",flexDirection:"column",gap:5}}>
                     <label style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{label}</label>
@@ -1929,16 +1972,16 @@ Regras: amount sempre positivo; ignore linhas de saldo/pagamento mínimo/encargo
                 ))}
               </div>
 
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:16}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
                 <div style={{display:"flex",flexDirection:"column",gap:5}}>
-                  <label style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Conta bancária</label>
+                  <label style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Conta padrão (quando não mapeada)</label>
                   <select value={mapAcc} onChange={e=>setMapAcc(e.target.value)}
                     style={{background:"#f5f7fb",border:`1px solid ${C.border}`,borderRadius:8,color:C.text,
                             fontFamily:"inherit",fontSize:13,padding:"8px 10px",outline:"none",cursor:"pointer"}}>
                     {accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
                   </select>
                 </div>
-                <div style={{display:"flex",flexDirection:"column",gap:5,gridColumn:"span 2"}}>
+                <div style={{display:"flex",flexDirection:"column",gap:5}}>
                   <label style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Ignorar linhas que contenham (separe por vírgula)</label>
                   <input value={skipKw} onChange={e=>setSkipKw(e.target.value)}
                     placeholder="SALDO,TOTAL,PAGAMENTO,ANTERIOR"
@@ -1969,6 +2012,11 @@ Regras: amount sempre positivo; ignore linhas de saldo/pagamento mínimo/encargo
                     <span style={{fontWeight:700,fontSize:14}}>
                       {keptRows.length} de {rows.length} linhas selecionadas
                     </span>
+                    {keptRows.reduce((s,r)=>s+(r.parcelas||1),0)!==keptRows.length&&(
+                      <span style={{fontSize:12,color:C.primary,fontWeight:700,background:C.primaryLight,borderRadius:6,padding:"2px 8px"}}>
+                        📅 {keptRows.reduce((s,r)=>s+(r.parcelas||1),0)} lançamentos gerados
+                      </span>
+                    )}
                     <span style={{fontSize:13,color:C.red,fontWeight:700}}>Total: {fmt(totalAmt)}</span>
                   </div>
                   <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
@@ -2097,7 +2145,7 @@ Regras: amount sempre positivo; ignore linhas de saldo/pagamento mínimo/encargo
                           checked={rows.length>0&&rows.every(r=>r.keep)}
                           onChange={e=>toggleAll(e.target.checked)} />
                       </th>
-                      {["Data","Descrição","Valor","Tipo","Categoria","Conta","Centro de Custo","Status",""].map(h=>(
+                      {["Data","Descrição","Valor","Tipo","Categoria","Conta","C.Custo","Parcelas","Status",""].map(h=>(
                         <th key={h} style={{padding:"9px 10px",textAlign:"left",fontSize:11,fontWeight:700,
                           color:C.muted,letterSpacing:"0.07em",textTransform:"uppercase",whiteSpace:"nowrap"}}>
                           {h}
@@ -2175,6 +2223,14 @@ Regras: amount sempre positivo; ignore linhas de saldo/pagamento mínimo/encargo
                               <option key={cc.id} value={cc.id}>{cc.icon} {cc.name}</option>
                             ))}
                           </select>
+                        </td>
+                        {/* Parcelas */}
+                        <td style={{padding:"8px 6px",whiteSpace:"nowrap"}}>
+                          <input type="number" value={row.parcelas||1} min="1" max="60"
+                            onChange={e=>updateRow(row.id,"parcelas",Math.max(1,parseInt(e.target.value)||1))}
+                            style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:6,
+                                    color:(row.parcelas||1)>1?C.primary:C.muted,fontFamily:"inherit",fontSize:12,
+                                    fontWeight:(row.parcelas||1)>1?700:400,padding:"3px 6px",outline:"none",width:56,textAlign:"center"}} />
                         </td>
                         {/* Status */}
                         <td style={{padding:"8px 6px"}}>
