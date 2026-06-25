@@ -676,7 +676,12 @@ const Dashboard = ({ txs, accounts, contacts, costCenters, onNew }) => {
 
   const upcoming = txs.filter(t => t.type==="expense" && (t.status==="pendente"||t.status==="vencido") && t.date >= tod()).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,5);
   const overdue  = txs.filter(t => t.status==="vencido");
-  const totalBalance = accounts.reduce((s,a)=>s+a.balance,0);
+  const totalBalance = accounts.reduce((a,acc) => {
+    const paid = txs.filter(t=>t.accountId===acc.id&&t.status==="pago");
+    const inc  = paid.filter(t=>t.type==="income" ).reduce((s,t)=>s+t.amount,0);
+    const exp  = paid.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
+    return a + acc.balance + inc - exp;
+  }, 0);
 
   // Cost center summary for current month
   const ccSummary = useMemo(()=>{
@@ -1296,9 +1301,10 @@ const Accounts = ({ accounts, txs, onAdd, onEdit, onDelete }) => {
 
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))", gap:14 }}>
         {accounts.map(a => {
-          const accTxs = txs.filter(t=>t.accountId===a.id&&t.status==="pago");
-          const inc = accTxs.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount,0);
-          const exp = accTxs.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
+          const accTxs  = txs.filter(t=>t.accountId===a.id&&t.status==="pago");
+          const inc      = accTxs.filter(t=>t.type==="income" ).reduce((s,t)=>s+t.amount,0);
+          const exp      = accTxs.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
+          const computed = a.balance + inc - exp;
           return (
             <Card key={a.id} style={{ borderLeft:`4px solid ${a.color}` }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 }}>
@@ -1311,14 +1317,16 @@ const Accounts = ({ accounts, txs, onAdd, onEdit, onDelete }) => {
                   <Btn small variant="danger" icon="trash" onClick={()=>onDelete(a.id)} />
                 </div>
               </div>
-              <div style={{ fontSize:24, fontWeight:800, color:a.balance<0?C.red:C.text, marginBottom:12 }}>{fmt(a.balance)}</div>
+              <div style={{ fontSize:11, color:C.muted, fontWeight:600, marginBottom:2 }}>SALDO ATUAL</div>
+              <div style={{ fontSize:24, fontWeight:800, color:computed<0?C.red:C.text, marginBottom:4 }}>{fmt(computed)}</div>
+              <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>Inicial: {fmt(a.balance)} · Entradas: <span style={{color:C.green}}>{fmt(inc)}</span> · Saídas: <span style={{color:C.red}}>{fmt(exp)}</span></div>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
                 <div style={{ background:C.greenLight, borderRadius:8, padding:"8px 12px" }}>
-                  <div style={{ fontSize:10, fontWeight:600, color:C.green, textTransform:"uppercase", letterSpacing:"0.07em" }}>Entradas</div>
+                  <div style={{ fontSize:10, fontWeight:600, color:C.green, textTransform:"uppercase", letterSpacing:"0.07em" }}>Entradas pagas</div>
                   <div style={{ fontSize:14, fontWeight:700, color:C.green }}>{fmt(inc)}</div>
                 </div>
                 <div style={{ background:C.redLight, borderRadius:8, padding:"8px 12px" }}>
-                  <div style={{ fontSize:10, fontWeight:600, color:C.red, textTransform:"uppercase", letterSpacing:"0.07em" }}>Saídas</div>
+                  <div style={{ fontSize:10, fontWeight:600, color:C.red, textTransform:"uppercase", letterSpacing:"0.07em" }}>Saídas pagas</div>
                   <div style={{ fontSize:14, fontWeight:700, color:C.red }}>{fmt(exp)}</div>
                 </div>
               </div>
@@ -1659,11 +1667,11 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
 
     // resolve nome → id (case-insensitive, partial match fallback)
     const resolveAcc = name => {
-      if (!name) return mapAcc;
+      if (!name) return { id: mapAcc, matched: true };
       const n = name.toLowerCase().trim();
-      return (accounts.find(a => a.name.toLowerCase().trim() === n)
-           || accounts.find(a => a.name.toLowerCase().includes(n) || n.includes(a.name.toLowerCase())))
-             ?.id ?? mapAcc;
+      const found = accounts.find(a => a.name.toLowerCase().trim() === n)
+                 || accounts.find(a => a.name.toLowerCase().includes(n) || n.includes(a.name.toLowerCase()));
+      return { id: found?.id ?? mapAcc, matched: !!found };
     };
     const resolveCC = name => {
       if (!name) return "";
@@ -1683,21 +1691,23 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
       const parcelas   = mPr  >= 0 ? (parseInt(String(row[mPr]  ?? "").trim()) || 1) : 1;
       const accName    = mAc  >= 0 ? String(row[mAc]  ?? "").trim() : "";
       const ccName     = mCC  >= 0 ? String(row[mCC]  ?? "").trim() : "";
+      const accRes     = resolveAcc(accName);
       built.push({
-        _idx:         i,
-        id:           uid(),
-        keep:         true,
-        date:         parseDt(row[mD]),
-        desc:         descRaw,
-        amount:       Math.abs(amt),
-        type:         itype,
-        category:     mC >= 0 ? (String(row[mC] ?? "").trim() || "Outros") : "Outros",
-        accountId:    resolveAcc(accName),
-        accountName:  accName,
-        costCenterId: resolveCC(ccName),
+        _idx:           i,
+        id:             uid(),
+        keep:           true,
+        date:           parseDt(row[mD]),
+        desc:           descRaw,
+        amount:         Math.abs(amt),
+        type:           itype,
+        category:       mC >= 0 ? (String(row[mC] ?? "").trim() || "Outros") : "Outros",
+        accountId:      accRes.id,
+        accountName:    accName,
+        accountMatched: accRes.matched,
+        costCenterId:   resolveCC(ccName),
         costCenterName: ccName,
-        status:       "pendente",
-        parcelas:     Math.min(Math.max(parcelas, 1), 60),
+        status:         "pendente",
+        parcelas:       Math.min(Math.max(parcelas, 1), 60),
       });
     });
     setRows(built);
@@ -2237,11 +2247,18 @@ Regras: amount sempre positivo; ignore linhas de saldo/pagamento mínimo/encargo
                         </td>
                         {/* Conta bancária por linha */}
                         <td style={{padding:"8px 6px"}}>
-                          <select value={row.accountId||mapAcc} onChange={e=>updateRow(row.id,"accountId",e.target.value)}
-                            style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:6,
-                                    color:C.muted,fontFamily:"inherit",fontSize:12,padding:"3px 6px",outline:"none",cursor:"pointer",maxWidth:110}}>
-                            {accounts.map(a=><option key={a.id} value={a.id}>{a.name.length>14?a.name.slice(0,13)+"…":a.name}</option>)}
-                          </select>
+                          <div style={{display:"flex",alignItems:"center",gap:4}}>
+                            {row.accountName && !row.accountMatched && (
+                              <span title={`"${row.accountName}" não encontrada — usando conta padrão`}
+                                style={{fontSize:13,cursor:"help"}}>⚠️</span>
+                            )}
+                            <select value={row.accountId||mapAcc} onChange={e=>updateRow(row.id,"accountId",e.target.value)}
+                              style={{background:"transparent",border:`1px solid ${row.accountName&&!row.accountMatched?C.yellow:C.border}`,
+                                      borderRadius:6,color:C.muted,fontFamily:"inherit",fontSize:12,
+                                      padding:"3px 6px",outline:"none",cursor:"pointer",maxWidth:110}}>
+                              {accounts.map(a=><option key={a.id} value={a.id}>{a.name.length>14?a.name.slice(0,13)+"…":a.name}</option>)}
+                            </select>
+                          </div>
                         </td>
                         {/* Cost center */}
                         <td style={{padding:"8px 6px"}}>
