@@ -105,7 +105,7 @@ CREATE INDEX IF NOT EXISTS idx_categories_org ON categories(organization_id);
 CREATE TABLE IF NOT EXISTS transactions (
   id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id         UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  desc                    TEXT NOT NULL,
+  "desc"                  TEXT NOT NULL,
   amount                  NUMERIC(14,2) NOT NULL,
   type                    TEXT NOT NULL CHECK (type IN ('expense','income')),
   category                TEXT NOT NULL,
