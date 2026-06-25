@@ -677,9 +677,9 @@ const Dashboard = ({ txs, accounts, contacts, costCenters, onNew }) => {
   const upcoming = txs.filter(t => t.type==="expense" && (t.status==="pendente"||t.status==="vencido") && t.date >= tod()).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,5);
   const overdue  = txs.filter(t => t.status==="vencido");
   const totalBalance = accounts.reduce((a,acc) => {
-    const paid = txs.filter(t=>t.accountId===acc.id&&t.status==="pago");
-    const inc  = paid.filter(t=>t.type==="income" ).reduce((s,t)=>s+t.amount,0);
-    const exp  = paid.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
+    const accTxs = txs.filter(t=>t.accountId===acc.id&&t.status!=="cancelado");
+    const inc = accTxs.filter(t=>t.type==="income" ).reduce((s,t)=>s+t.amount,0);
+    const exp = accTxs.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
     return a + acc.balance + inc - exp;
   }, 0);
 
@@ -1301,10 +1301,14 @@ const Accounts = ({ accounts, txs, onAdd, onEdit, onDelete }) => {
 
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))", gap:14 }}>
         {accounts.map(a => {
-          const accTxs  = txs.filter(t=>t.accountId===a.id&&t.status==="pago");
-          const inc      = accTxs.filter(t=>t.type==="income" ).reduce((s,t)=>s+t.amount,0);
-          const exp      = accTxs.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
-          const computed = a.balance + inc - exp;
+          const paid    = txs.filter(t=>t.accountId===a.id&&t.status==="pago");
+          const pend    = txs.filter(t=>t.accountId===a.id&&(t.status==="pendente"||t.status==="vencido"));
+          const incPago = paid.filter(t=>t.type==="income" ).reduce((s,t)=>s+t.amount,0);
+          const expPago = paid.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
+          const incPend = pend.filter(t=>t.type==="income" ).reduce((s,t)=>s+t.amount,0);
+          const expPend = pend.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
+          const saldoAtual    = a.balance + incPago - expPago;
+          const saldoPrevisto = saldoAtual + incPend - expPend;
           return (
             <Card key={a.id} style={{ borderLeft:`4px solid ${a.color}` }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 }}>
@@ -1317,17 +1321,32 @@ const Accounts = ({ accounts, txs, onAdd, onEdit, onDelete }) => {
                   <Btn small variant="danger" icon="trash" onClick={()=>onDelete(a.id)} />
                 </div>
               </div>
-              <div style={{ fontSize:11, color:C.muted, fontWeight:600, marginBottom:2 }}>SALDO ATUAL</div>
-              <div style={{ fontSize:24, fontWeight:800, color:computed<0?C.red:C.text, marginBottom:4 }}>{fmt(computed)}</div>
-              <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>Inicial: {fmt(a.balance)} · Entradas: <span style={{color:C.green}}>{fmt(inc)}</span> · Saídas: <span style={{color:C.red}}>{fmt(exp)}</span></div>
+
+              {/* Saldo atual (só pagos) */}
+              <div style={{ fontSize:10, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:2 }}>Saldo atual (pagos)</div>
+              <div style={{ fontSize:22, fontWeight:800, color:saldoAtual<0?C.red:C.text, marginBottom:8 }}>{fmt(saldoAtual)}</div>
+
+              {/* Saldo previsto (pagos + pendentes) */}
+              {(expPend > 0 || incPend > 0) && (
+                <div style={{ background:"#f0f4f8", borderRadius:8, padding:"8px 12px", marginBottom:12 }}>
+                  <div style={{ fontSize:10, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:4 }}>Saldo previsto (com pendentes)</div>
+                  <div style={{ fontSize:16, fontWeight:800, color:saldoPrevisto<0?C.red:C.primary }}>{fmt(saldoPrevisto)}</div>
+                  <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>
+                    {expPend > 0 && <span>A pagar: <span style={{color:C.red,fontWeight:600}}>{fmt(expPend)}</span></span>}
+                    {expPend > 0 && incPend > 0 && <span> · </span>}
+                    {incPend > 0 && <span>A receber: <span style={{color:C.green,fontWeight:600}}>{fmt(incPend)}</span></span>}
+                  </div>
+                </div>
+              )}
+
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
                 <div style={{ background:C.greenLight, borderRadius:8, padding:"8px 12px" }}>
                   <div style={{ fontSize:10, fontWeight:600, color:C.green, textTransform:"uppercase", letterSpacing:"0.07em" }}>Entradas pagas</div>
-                  <div style={{ fontSize:14, fontWeight:700, color:C.green }}>{fmt(inc)}</div>
+                  <div style={{ fontSize:14, fontWeight:700, color:C.green }}>{fmt(incPago)}</div>
                 </div>
                 <div style={{ background:C.redLight, borderRadius:8, padding:"8px 12px" }}>
                   <div style={{ fontSize:10, fontWeight:600, color:C.red, textTransform:"uppercase", letterSpacing:"0.07em" }}>Saídas pagas</div>
-                  <div style={{ fontSize:14, fontWeight:700, color:C.red }}>{fmt(exp)}</div>
+                  <div style={{ fontSize:14, fontWeight:700, color:C.red }}>{fmt(expPago)}</div>
                 </div>
               </div>
             </Card>
