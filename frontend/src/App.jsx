@@ -1753,7 +1753,7 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
       const amt = parseFloat(r.amount) || 0;
       if (amt <= 0 || !r.desc) return;
       const total   = r.parcelas || 1;
-      const groupId = total > 1 ? uid() : null;
+      const groupId = total > 1 ? crypto.randomUUID() : null;
       for (let idx = 0; idx < total; idx++) {
         toImport.push({
           id:                   uid(),
