@@ -284,6 +284,71 @@ router.patch("/bulk", async (req, res) => {
   }
 });
 
+// ── PATCH /api/transactions/group/:groupId/from/:txId — este e futuros ────────
+router.patch("/group/:groupId/from/:txId", async (req, res) => {
+  const { groupId, txId } = req.params;
+  const changes = req.body;
+  try {
+    const pivot = await pool.query(
+      "SELECT date FROM transactions WHERE id=$1 AND organization_id=$2",
+      [txId, req.user.organizationId]
+    );
+    if (!pivot.rows[0]) return res.status(404).json({ error: "Lançamento não encontrado." });
+    const pivotDate = pivot.rows[0].date;
+
+    const result = await pool.query(
+      `UPDATE transactions SET
+        "desc"=COALESCE($1,"desc"), amount=COALESCE($2,amount), type=COALESCE($3,type),
+        category=COALESCE($4,category), status=COALESCE($5,status),
+        account_id=COALESCE($6,account_id), contact_id=COALESCE($7,contact_id),
+        cost_center_id=COALESCE($8,cost_center_id), notes=COALESCE($9,notes),
+        updated_at=now()
+       WHERE recurrence_group_id=$10 AND organization_id=$11 AND date >= $12
+       RETURNING *`,
+      [
+        changes.desc || null, changes.amount || null, changes.type || null,
+        changes.category || null, changes.status || null,
+        changes.accountId || null, changes.contactId || null,
+        changes.costCenterId || null, changes.notes || null,
+        groupId, req.user.organizationId, pivotDate,
+      ]
+    );
+    res.json(result.rows.map(toApi));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao atualizar série de recorrência." });
+  }
+});
+
+// ── PATCH /api/transactions/group/:groupId/all — todos da série ───────────────
+router.patch("/group/:groupId/all", async (req, res) => {
+  const { groupId } = req.params;
+  const changes = req.body;
+  try {
+    const result = await pool.query(
+      `UPDATE transactions SET
+        "desc"=COALESCE($1,"desc"), amount=COALESCE($2,amount), type=COALESCE($3,type),
+        category=COALESCE($4,category), status=COALESCE($5,status),
+        account_id=COALESCE($6,account_id), contact_id=COALESCE($7,contact_id),
+        cost_center_id=COALESCE($8,cost_center_id), notes=COALESCE($9,notes),
+        updated_at=now()
+       WHERE recurrence_group_id=$10 AND organization_id=$11
+       RETURNING *`,
+      [
+        changes.desc || null, changes.amount || null, changes.type || null,
+        changes.category || null, changes.status || null,
+        changes.accountId || null, changes.contactId || null,
+        changes.costCenterId || null, changes.notes || null,
+        groupId, req.user.organizationId,
+      ]
+    );
+    res.json(result.rows.map(toApi));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro ao atualizar todos os lançamentos da série." });
+  }
+});
+
 // ── DELETE /api/transactions/:id ──────────────────────────────────────────────
 router.delete("/:id", async (req, res) => {
   try {

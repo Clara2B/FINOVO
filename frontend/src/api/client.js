@@ -73,6 +73,10 @@ export const api = {
   deleteTransaction: (id) => request(`/transactions/${id}`, { method: "DELETE" }),
   deleteImportBatch: (batchId) => request(`/transactions/batch/${batchId}`, { method: "DELETE" }),
   deleteRecurrenceGroup: (groupId) => request(`/transactions/group/${groupId}`, { method: "DELETE" }),
+  updateRecurrenceFrom: (groupId, txId, changes) =>
+    request(`/transactions/group/${groupId}/from/${txId}`, { method: "PATCH", body: JSON.stringify(changes) }),
+  updateRecurrenceAll: (groupId, changes) =>
+    request(`/transactions/group/${groupId}/all`, { method: "PATCH", body: JSON.stringify(changes) }),
   importTransactions: (rows, batchId) =>
     request("/transactions/import", { method: "POST", body: JSON.stringify({ rows, batchId }) }),
 

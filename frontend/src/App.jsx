@@ -50,6 +50,12 @@ const MONTHS = Array.from({ length: 6 }, (_, i) => {
   const d = new Date(today.getFullYear(), today.getMonth() - 5 + i, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 });
+// Meses para filtro de Bills: 6 passados + atual + 12 futuros
+const BILL_MONTHS = Array.from({ length: 19 }, (_, i) => {
+  const d = new Date(today.getFullYear(), today.getMonth() - 6 + i, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+});
+const CUR_MONTH = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
 // Default categories — replaced by dynamic user categories at runtime via window.__userCats
 const DEFAULT_CATS_EXPENSE = ["Alimentação","Transporte","Moradia","Saúde","Educação","Lazer","Vestuário","Assinaturas","Cartão de Crédito","Investimentos","Impostos","Outros"];
 const DEFAULT_CATS_INCOME  = ["Salário","Freelance","Aluguel Recebido","Dividendos","Reembolso","Venda","Outros"];
@@ -192,6 +198,110 @@ const SummaryCard = ({ label, value, change, icon, color, colorLight, hideValue 
     </div>
   </Card>
 );
+// ── MODAL DE PAGAMENTO ────────────────────────────────────────────────────────
+const PayModal = ({ tx, onConfirm, onClose }) => {
+  const [dataPag, setDataPag] = useState(tod());
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(26,29,46,.55)",zIndex:1100,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}
+      onClick={onClose}>
+      <div style={{background:C.surface,borderRadius:16,width:"100%",maxWidth:420,boxShadow:"0 24px 64px rgba(0,0,0,.2)",overflow:"hidden"}}
+        onClick={e=>e.stopPropagation()}>
+        <div style={{padding:"20px 24px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <h3 style={{fontWeight:800,fontSize:17,color:C.text}}>✅ Confirmar Pagamento</h3>
+          <button onClick={onClose} style={{background:"transparent",border:"none",cursor:"pointer",fontSize:20,color:C.muted}}>×</button>
+        </div>
+        <div style={{padding:"20px 24px",display:"flex",flexDirection:"column",gap:14}}>
+          <div style={{background:C.bg,borderRadius:10,padding:"12px 16px",display:"flex",flexDirection:"column",gap:6}}>
+            <div style={{fontSize:13,fontWeight:700,color:C.text}}>{tx.desc}</div>
+            <div style={{fontSize:18,fontWeight:800,color:tx.type==="income"?C.green:C.red}}>
+              {tx.type==="income"?"+":"-"}{fmt(tx.amount)}
+            </div>
+            <div style={{fontSize:12,color:C.muted}}>Vencimento: {fmtDate(tx.date)}</div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            <label style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:"0.07em"}}>
+              📅 Data do Pagamento
+            </label>
+            <input type="date" value={dataPag} onChange={e=>setDataPag(e.target.value)}
+              style={{background:"#f5f7fb",border:`1px solid ${C.border}`,borderRadius:9,padding:"10px 14px",
+                fontSize:14,fontFamily:"inherit",color:C.text,outline:"none",width:"100%",boxSizing:"border-box"}} />
+          </div>
+        </div>
+        <div style={{padding:"0 24px 20px",display:"flex",gap:10,justifyContent:"flex-end"}}>
+          <button onClick={onClose}
+            style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:9,padding:"10px 20px",
+              fontFamily:"inherit",fontWeight:600,fontSize:14,cursor:"pointer",color:C.muted}}>
+            Cancelar
+          </button>
+          <button onClick={()=>{ if(!dataPag){alert("Informe a data de pagamento.");return;} onConfirm(dataPag); }}
+            style={{background:`linear-gradient(135deg,${C.green},#0c9a72)`,color:"#fff",border:"none",borderRadius:9,
+              padding:"10px 24px",fontFamily:"inherit",fontWeight:700,fontSize:14,cursor:"pointer",
+              boxShadow:"0 2px 8px rgba(14,168,130,.3)"}}>
+            Confirmar Pagamento
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── MODAL DE EDIÇÃO DE RECORRÊNCIA ────────────────────────────────────────────
+const RecurrenceEditModal = ({ tx, onChoice, onClose }) => {
+  const [choice, setChoice] = useState("single");
+  const opts = [
+    { value:"single",  label:"Somente este lançamento",            desc:"Altera apenas este registro, sem afetar os demais da série." },
+    { value:"future",  label:"Este e todos os futuros",            desc:"Altera este e todos os lançamentos posteriores da mesma série." },
+    { value:"all",     label:"Todos (passados, atual e futuros)",  desc:"Altera todos os lançamentos da série, independente da data." },
+  ];
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(26,29,46,.55)",zIndex:1100,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}
+      onClick={onClose}>
+      <div style={{background:C.surface,borderRadius:16,width:"100%",maxWidth:480,boxShadow:"0 24px 64px rgba(0,0,0,.2)"}}
+        onClick={e=>e.stopPropagation()}>
+        <div style={{padding:"20px 24px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div>
+            <h3 style={{fontWeight:800,fontSize:17,color:C.text}}>✏️ Editar Lançamento Recorrente</h3>
+            <p style={{fontSize:12,color:C.muted,marginTop:3}}>Este lançamento faz parte de uma série recorrente.</p>
+          </div>
+          <button onClick={onClose} style={{background:"transparent",border:"none",cursor:"pointer",fontSize:20,color:C.muted}}>×</button>
+        </div>
+        <div style={{padding:"20px 24px",display:"flex",flexDirection:"column",gap:10}}>
+          <p style={{fontSize:13,color:C.muted,marginBottom:4}}>O que deseja alterar?</p>
+          {opts.map(o=>(
+            <label key={o.value} onClick={()=>setChoice(o.value)}
+              style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 16px",borderRadius:10,cursor:"pointer",
+                border:`2px solid ${choice===o.value?C.primary:C.border}`,
+                background:choice===o.value?C.primaryLight:"transparent",transition:"all .15s"}}>
+              <div style={{width:18,height:18,borderRadius:"50%",border:`2px solid ${choice===o.value?C.primary:C.dim}`,
+                background:choice===o.value?C.primary:"transparent",flexShrink:0,marginTop:2,
+                display:"flex",alignItems:"center",justifyContent:"center"}}>
+                {choice===o.value && <div style={{width:8,height:8,borderRadius:"50%",background:"#fff"}} />}
+              </div>
+              <div>
+                <div style={{fontSize:14,fontWeight:700,color:C.text}}>{o.label}</div>
+                <div style={{fontSize:12,color:C.muted,marginTop:2}}>{o.desc}</div>
+              </div>
+            </label>
+          ))}
+        </div>
+        <div style={{padding:"0 24px 20px",display:"flex",gap:10,justifyContent:"flex-end"}}>
+          <button onClick={onClose}
+            style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:9,padding:"10px 20px",
+              fontFamily:"inherit",fontWeight:600,fontSize:14,cursor:"pointer",color:C.muted}}>
+            Cancelar
+          </button>
+          <button onClick={()=>onChoice(choice)}
+            style={{background:`linear-gradient(135deg,${C.primary},#1a6bc4)`,color:"#fff",border:"none",borderRadius:9,
+              padding:"10px 24px",fontFamily:"inherit",fontWeight:700,fontSize:14,cursor:"pointer",
+              boxShadow:"0 2px 8px rgba(13,79,160,.25)"}}>
+            Continuar →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 //  TRANSACTION FORM
 const TxForm = ({ initial, accounts, contacts, onSave, onClose }) => {
   const aCE = () => [...DEFAULT_CATS_EXPENSE, ...(window.__userCats?.expense||[])];
@@ -788,7 +898,7 @@ const Bills = ({ txs, accounts, contacts, costCenters, onAdd, onEdit, onDelete, 
   const [tab, setTab]         = useState("expense");
   const [search, setSearch]   = useState("");
   const [statusF, setStatusF] = useState("all");
-  const [monthF, setMonthF]   = useState(MONTHS[MONTHS.length-1]);
+  const [monthF, setMonthF]   = useState(CUR_MONTH);
   const [selIds, setSelIds]   = useState(new Set());
   const [bulkModal, setBulkModal] = useState(false);
   const [bulkForm, setBulkForm]   = useState({});
@@ -871,7 +981,7 @@ const Bills = ({ txs, accounts, contacts, costCenters, onAdd, onEdit, onDelete, 
             style={{...si,width:200,padding:"7px 11px",fontSize:13}} />
           <select value={monthF} onChange={e=>setMonthF(e.target.value)} style={{...si,width:140,padding:"7px 11px",fontSize:13}}>
             <option value="all">Todos os meses</option>
-            {MONTHS.map(m=><option key={m} value={m}>{fmtMonth(m+"-01")}</option>)}
+            {BILL_MONTHS.map(m=><option key={m} value={m}>{fmtMonth(m+"-01")}{m>CUR_MONTH?" 🔮":""}</option>)}
           </select>
           <select value={statusF} onChange={e=>setStatusF(e.target.value)} style={{...si,width:140,padding:"7px 11px",fontSize:13}}>
             <option value="all">Todos os status</option>
@@ -933,7 +1043,15 @@ const Bills = ({ txs, accounts, contacts, costCenters, onAdd, onEdit, onDelete, 
             ))}
           </tr></thead>
           <tbody>
-            {list.length===0 && <tr><td colSpan={9} style={{padding:32,textAlign:"center",color:C.dim,fontSize:13}}>Nenhum lançamento encontrado</td></tr>}
+            {list.length===0 && <tr><td colSpan={9} style={{padding:40,textAlign:"center",color:C.dim,fontSize:13}}>
+              {monthF>CUR_MONTH
+                ? <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:32}}>🔮</span>
+                    <span style={{fontWeight:600,color:C.muted}}>Nenhum lançamento previsto para este mês</span>
+                    <span style={{fontSize:12}}>Lançamentos recorrentes aparecerão aqui automaticamente</span>
+                  </div>
+                : "Nenhum lançamento encontrado"}
+            </td></tr>}
             {list.map((t,i)=>{
               const ct  = getContact(t.contactId);
               const acc = accounts.find(a=>a.id===t.accountId);
@@ -2561,9 +2679,31 @@ const Recurrences = ({ txs, accounts, contacts, onGenerate, onDeleteGroup }) => 
 // Pluggy sandbox connector IDs for the most common Brazilian banks
 
 const ICON_MAP = {
-  expense:["🍔","🚗","🏠","💊","📚","🎮","👗","📺","💳","📈","📋","🎯","🏋️","✈️","🐾","🎵","🎨","🛒","🔧","💡","📦","🤝","🧾","🍷","☕","🌿","💈"],
-  income: ["💰","💼","🏡","📊","🤑","🎁","🏆","💎","🔑","🌟","📝","🎓","🚀","💻","🎤"]
+  expense:[
+    "🍔","🍕","🍣","🥗","🛒","☕","🍷","🍺","🥩","🍰",
+    "🚗","⛽","🚕","🚌","✈️","🚢","🏍️","🚲","🛵","🚆",
+    "🏠","🏢","🏪","🔑","🛋️","🪴","🧹","🔧","💡","💧",
+    "⚡","🌐","📡","📱","💻","🖨️","🖥️","📺","🎮","🎧",
+    "💊","🏥","🩺","💉","🧴","🏋️","🧘","🚑","👓","🦷",
+    "📚","🎓","✏️","📐","🎒","📖","🏫","🔬","🧪","📝",
+    "👗","👠","👜","🧥","💍","👒","🕶️","🧣","🛍️","💄",
+    "📋","🧾","💳","🏦","📈","📉","💹","🏧","🔐","📊",
+    "🤝","📣","🎯","📦","🚚","🏭","⚙️","🔩","🛠️","📌",
+    "🎵","🎨","🎭","🎪","🎬","📸","🎻","🎸","🎹","🎤",
+    "🐾","🐶","🐱","🌿","🌳","🌱","🌻","🎃","❄️","☀️",
+    "🏆","🎁","🎉","🎈","🎀","🪆","🧸","🃏","🎲","🀄",
+  ],
+  income:[
+    "💰","💵","💴","💶","💷","🤑","💸","🏧","💹","📈",
+    "💼","🏢","📊","📋","🤝","🏆","🥇","🎯","🚀","⭐",
+    "🏡","🏠","🏗️","🏘️","🔑","🏦","📝","🧾","📜","✍️",
+    "💎","👑","🌟","✨","🎓","🎁","🎀","🎉","🪙","💲",
+    "🖥️","💻","📱","🎤","🎸","🛒","🛍️","🏪","🏬","📦",
+    "🌐","📡","📣","🎬","📸","🌿","🌱","🌻","🍀","🦋",
+  ],
 };
+// Todos os ícones combinados para busca livre
+const ALL_ICONS = [...new Set([...ICON_MAP.expense, ...ICON_MAP.income])];
 const CAT_COLORS = ["#6c63ff","#0ea882","#f26522","#e03535","#f59e0b","#3b9fd4","#0d4fa0","#ec4899","#8b5cf6","#10b981","#ef4444","#f97316"];
 
 const CategoriesPage = ({ userCats, setUserCats }) => {
@@ -2637,12 +2777,33 @@ const CategoriesPage = ({ userCats, setUserCats }) => {
               placeholder="Ex: Farmácia, Academia, Consultoria..."
               style={{...si,width:"100%"}} />
           </div>
-          <div style={{display:"flex",flexDirection:"column",gap:5}}>
-            <label style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Ícone</label>
-            <select value={form.icon} onChange={e=>setForm(f=>({...f,icon:e.target.value}))}
-              style={{...si,cursor:"pointer",fontSize:18,padding:"7px 10px",width:70}}>
-              {(ICON_MAP[form.type]||ICON_MAP.expense).map(i=><option key={i} value={i}>{i}</option>)}
-            </select>
+          <div style={{display:"flex",flexDirection:"column",gap:5,gridColumn:"span 2"}}>
+            <label style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:"0.07em"}}>
+              Ícone selecionado: <span style={{fontSize:20}}>{form.icon}</span>
+            </label>
+            <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:4}}>
+              <input
+                value={form.icon}
+                onChange={e=>setForm(f=>({...f,icon:e.target.value}))}
+                placeholder="Cole um emoji personalizado..."
+                style={{...si,width:200,fontSize:18,textAlign:"center",padding:"6px 10px"}}
+                maxLength={8}
+              />
+              <span style={{fontSize:11,color:C.muted}}>ou escolha abaixo:</span>
+            </div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:4,maxHeight:160,overflowY:"auto",
+              background:"#f7f8fc",borderRadius:10,padding:"10px",border:`1px solid ${C.border}`}}>
+              {(ICON_MAP[form.type]||ICON_MAP.expense).map(ic=>(
+                <button key={ic} type="button" onClick={()=>setForm(f=>({...f,icon:ic}))}
+                  title={ic}
+                  style={{width:36,height:36,borderRadius:8,border:`2px solid ${form.icon===ic?C.primary:"transparent"}`,
+                    background:form.icon===ic?C.primaryLight:"transparent",fontSize:20,cursor:"pointer",
+                    display:"flex",alignItems:"center",justifyContent:"center",transition:"all .1s",
+                    transform:form.icon===ic?"scale(1.15)":"none"}}>
+                  {ic}
+                </button>
+              ))}
+            </div>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:5}}>
             <label style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Cor</label>
@@ -2981,7 +3142,9 @@ export default function App() {
   const [costCenters,   setCostCenters]   = useState([]);
   const [userCatsRaw, setUserCatsRaw] = useState({ expense:[], income:[] }); // {expense:[{id,name,...}], income:[...]}
   const [page,      setPage]      = useState("dashboard");
-  const [modal,     setModal]     = useState(null); // {type:"new"|"edit", tx?}
+  const [modal,     setModal]     = useState(null); // {type:"new"|"edit", tx?, recurrenceScope?}
+  const [payModal,  setPayModal]  = useState(null); // tx a pagar
+  const [recModal,  setRecModal]  = useState(null); // tx a editar com recorrência
   const [collapsed, setCollapsed] = useState(false);
   const [toast,     setToast]     = useState(null);
   const [loadingData, setLoadingData] = useState(true);
@@ -3030,6 +3193,7 @@ export default function App() {
   const saveTx = async (tx) => {
     const { seriesDates, ...txData } = tx;
     const isNew = !txs.find(t=>t.id===txData.id);
+    const scope = modal?.recurrenceScope || "single";
     try {
       if (isNew) {
         const installments = seriesDates?.length || 1;
@@ -3041,6 +3205,14 @@ export default function App() {
           setTxs(prev => [result, ...prev]);
           showToast("Transação salva com sucesso!");
         }
+      } else if (scope === "future" && txData.recurrenceGroupId) {
+        const updated = await api.updateRecurrenceFrom(txData.recurrenceGroupId, txData.id, txData);
+        setTxs(prev => { const m = new Map(updated.map(u=>[u.id,u])); return prev.map(t=>m.get(t.id)||t); });
+        showToast(`${updated.length} lançamentos atualizados!`);
+      } else if (scope === "all" && txData.recurrenceGroupId) {
+        const updated = await api.updateRecurrenceAll(txData.recurrenceGroupId, txData);
+        setTxs(prev => { const m = new Map(updated.map(u=>[u.id,u])); return prev.map(t=>m.get(t.id)||t); });
+        showToast(`${updated.length} lançamentos atualizados!`);
       } else {
         const updated = await api.updateTransaction(txData.id, txData);
         setTxs(prev => prev.map(t => t.id===updated.id ? updated : t));
@@ -3049,6 +3221,15 @@ export default function App() {
       setModal(null);
     } catch (err) {
       showToast(err.message || "Erro ao salvar transação", "info");
+    }
+  };
+
+  // Abre modal de recorrência se necessário, senão abre TxForm direto
+  const handleEdit = (tx) => {
+    if (tx.recurrenceGroupId) {
+      setRecModal(tx);
+    } else {
+      setModal({ type:"edit", tx });
     }
   };
 
@@ -3092,13 +3273,19 @@ export default function App() {
     }
   };
 
-  const markPaid = async (id) => {
+  const markPaid = (id) => {
+    const tx = txs.find(t=>t.id===id);
+    if (tx) setPayModal(tx);
+  };
+
+  const confirmPaid = async (tx, dataPagamento) => {
     try {
-      const updated = await api.markTransactionPaid(id);
-      setTxs(p=>p.map(t=>t.id===id ? updated : t));
-      showToast("Marcado como pago!");
+      const updated = await api.updateTransaction(tx.id, { ...tx, status:"pago", paidAt: dataPagamento });
+      setTxs(p=>p.map(t=>t.id===tx.id ? updated : t));
+      setPayModal(null);
+      showToast("Pagamento registrado!");
     } catch (err) {
-      showToast(err.message || "Erro ao marcar como pago", "info");
+      showToast(err.message || "Erro ao registrar pagamento", "info");
     }
   };
 
@@ -3295,7 +3482,7 @@ export default function App() {
         {/* Page content */}
         <main style={{ flex:1, padding:"28px 32px", maxWidth:1200 }}>
           {page==="dashboard"   && <Dashboard txs={txs} accounts={accounts} contacts={contacts} costCenters={costCenters} onNew={()=>setModal({type:"new"})} />}
-          {page==="bills"       && <Bills txs={txs} accounts={accounts} contacts={contacts} costCenters={costCenters} onAdd={()=>setModal({type:"new"})} onEdit={tx=>setModal({type:"edit",tx})} onDelete={deleteTx} onMarkPaid={markPaid} onBulkEdit={bulkEditTxs} onDuplicate={duplicateTx} />}
+          {page==="bills"       && <Bills txs={txs} accounts={accounts} contacts={contacts} costCenters={costCenters} onAdd={()=>setModal({type:"new"})} onEdit={handleEdit} onDelete={deleteTx} onMarkPaid={markPaid} onBulkEdit={bulkEditTxs} onDuplicate={duplicateTx} />}
           {page==="cashflow"    && <Cashflow txs={txs} />}
           {page==="accounts"    && <Accounts accounts={accounts} txs={txs} onAdd={saveAccount} onEdit={a=>saveAccount(a)} onDelete={deleteAccount} />}
           {page==="costcenters" && <CostCentersPage costCenters={costCenters} setCostCenters={setCostCentersApi} txs={txs} />}
@@ -3306,11 +3493,25 @@ export default function App() {
         </main>
       </div>
 
-      {/* Modal */}
+      {/* Modal de transação */}
       {modal && (
         <Modal title={modal.type==="new"?"Nova Transação":"Editar Transação"} onClose={()=>setModal(null)} width={580}>
           <TxForm initial={modal.tx} accounts={accounts} contacts={contacts} onSave={saveTx} onClose={()=>setModal(null)} />
         </Modal>
+      )}
+
+      {/* Modal de pagamento */}
+      {payModal && (
+        <PayModal tx={payModal} onConfirm={(data)=>confirmPaid(payModal,data)} onClose={()=>setPayModal(null)} />
+      )}
+
+      {/* Modal de edição de recorrência */}
+      {recModal && (
+        <RecurrenceEditModal
+          tx={recModal}
+          onChoice={(scope)=>{ setRecModal(null); setModal({ type:"edit", tx:recModal, recurrenceScope:scope }); }}
+          onClose={()=>setRecModal(null)}
+        />
       )}
 
       {/* Toast */}
