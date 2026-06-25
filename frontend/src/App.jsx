@@ -1550,7 +1550,9 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
 
   // ── helpers ────────────────────────────────
   const parseAmt = s => {
-    if (!s && s !== 0) return null;
+    if (s === null || s === undefined || s === "") return null;
+    // Número JS direto (raw:true)
+    if (typeof s === "number") return isNaN(s) ? null : s;
     let v = String(s).replace(/[R$\s"']/g, "").trim();
     if (/\d{1,3}(\.\d{3})+(,\d+)?$/.test(v)) v = v.replace(/\./g, "").replace(",", ".");
     else v = v.replace(",", ".");
@@ -1559,22 +1561,34 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
   };
 
   const parseDt = raw => {
-    if (!raw) return tod();
-    // SheetJS com cellDates:true pode retornar objeto Date
+    if (!raw && raw !== 0) return tod();
+    // Objeto Date nativo (raw:true + cellDates:true)
     if (raw instanceof Date) return isNaN(raw) ? tod() : raw.toISOString().slice(0, 10);
+    // Número: serial Excel (raw:true sem cellDates) ou número puro
+    if (typeof raw === "number") {
+      if (raw > 40000 && raw < 60000) {
+        const d = new Date(Date.UTC(1899, 11, 30) + raw * 86400000);
+        return isNaN(d) ? tod() : d.toISOString().slice(0, 10);
+      }
+      return tod();
+    }
     const s = String(raw).trim();
+    if (!s) return tod();
+    // YYYY-MM-DD
     if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
-    const m1 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+    // DD/MM/YYYY ou DD/MM/YY
+    const m1 = s.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
     if (m1) {
       const y = m1[3].length === 2 ? "20" + m1[3] : m1[3];
-      return `${y}-${m1[2].padStart(2,"0")}-${m1[1].padStart(2,"0")}`;
+      // se o 3º grupo ≥ 1900 → é ano → DD/MM/YYYY
+      if (parseInt(y) >= 1900) return `${y}-${m1[2].padStart(2,"0")}-${m1[1].padStart(2,"0")}`;
     }
-    // Serial Excel (ex: 46178) — époc 1899-12-30
+    // String numérica de serial Excel
     if (/^\d{4,5}$/.test(s)) {
       const n = parseInt(s);
       if (n > 40000 && n < 60000) {
         const d = new Date(Date.UTC(1899, 11, 30) + n * 86400000);
-        return d.toISOString().slice(0, 10);
+        return isNaN(d) ? tod() : d.toISOString().slice(0, 10);
       }
     }
     const d = new Date(s);
@@ -1600,7 +1614,7 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
         if (!XLSX) { setError("Biblioteca SheetJS não carregada. Recarregue a página."); return; }
         const wb  = XLSX.read(new Uint8Array(e.target.result), { type:"array", cellDates:true, cellNF:true });
         const ws  = wb.Sheets[wb.SheetNames[0]];
-        const all = XLSX.utils.sheet_to_json(ws, { header:1, raw:false, dateNF:"YYYY-MM-DD", defval:"" });
+        const all = XLSX.utils.sheet_to_json(ws, { header:1, raw:true, cellDates:true, defval:"" });
 
         // find first non-empty row = header
         let hi = 0;
