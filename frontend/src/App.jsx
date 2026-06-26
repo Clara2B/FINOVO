@@ -1286,8 +1286,9 @@ const Cashflow = ({ txs }) => {
 //  ACCOUNTS
 const Accounts = ({ accounts, txs, onAdd, onEdit, onDelete }) => {
   const blank = { id:uid(), name:"", bank:"", type:"corrente", balance:"", color:"#6c63ff" };
-  const [form, setForm] = useState(blank);
-  const [editingId, setEditingId] = useState(null); // null=hidden "new"=new, id=edit
+  const [form,      setForm]      = useState(blank);
+  const [editingId, setEditingId] = useState(null);
+  const [selMonth,  setSelMonth]  = useState(CUR_MONTH);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
 
   const openNew  = () => { setForm({...blank,id:uid()}); setEditingId("new"); };
@@ -1300,11 +1301,29 @@ const Accounts = ({ accounts, txs, onAdd, onEdit, onDelete }) => {
     setForm(blank); setEditingId(null);
   };
 
+  const monthIdx   = BILL_MONTHS.indexOf(selMonth);
+  const prevMonth  = monthIdx > 0 ? BILL_MONTHS[monthIdx-1] : null;
+  const nextMonth  = monthIdx < BILL_MONTHS.length-1 ? BILL_MONTHS[monthIdx+1] : null;
+
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:12 }}>
         <h2 style={{ fontSize:22, fontWeight:800 }}>Contas Bancárias</h2>
-        {!editingId && <Btn variant="primary" icon="plus" onClick={openNew}>Nova Conta</Btn>}
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          {/* Navegador de mês */}
+          <div style={{ display:"flex", alignItems:"center", gap:4, background:"#eef1f8", borderRadius:10, padding:"4px 8px" }}>
+            <button onClick={()=>prevMonth&&setSelMonth(prevMonth)} disabled={!prevMonth}
+              style={{ background:"none", border:"none", cursor:prevMonth?"pointer":"default", fontSize:16,
+                       color:prevMonth?C.text:C.dim, padding:"0 4px", opacity:prevMonth?1:.3 }}>‹</button>
+            <span style={{ fontSize:13, fontWeight:700, color:C.primary, minWidth:90, textAlign:"center" }}>
+              {fmtMonth(selMonth+"-01")}{selMonth>CUR_MONTH?" 🔮":""}
+            </span>
+            <button onClick={()=>nextMonth&&setSelMonth(nextMonth)} disabled={!nextMonth}
+              style={{ background:"none", border:"none", cursor:nextMonth?"pointer":"default", fontSize:16,
+                       color:nextMonth?C.text:C.dim, padding:"0 4px", opacity:nextMonth?1:.3 }}>›</button>
+          </div>
+          {!editingId && <Btn variant="primary" icon="plus" onClick={openNew}>Nova Conta</Btn>}
+        </div>
       </div>
 
       {editingId && (
@@ -1332,20 +1351,29 @@ const Accounts = ({ accounts, txs, onAdd, onEdit, onDelete }) => {
 
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))", gap:14 }}>
         {accounts.map(a => {
-          const paid    = txs.filter(t=>t.accountId===a.id&&t.status==="pago");
-          const pend    = txs.filter(t=>t.accountId===a.id&&(t.status==="pendente"||t.status==="vencido"));
-          const incPago = paid.filter(t=>t.type==="income" ).reduce((s,t)=>s+t.amount,0);
-          const expPago = paid.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
-          const incPend = pend.filter(t=>t.type==="income" ).reduce((s,t)=>s+t.amount,0);
-          const expPend = pend.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
-          const saldoAtual    = a.balance + incPago - expPago;
-          const saldoPrevisto = saldoAtual + incPend - expPend;
+          // Todas as transações da conta no mês selecionado
+          const mesATxs  = txs.filter(t=>t.accountId===a.id && getMonth(t.date)===selMonth && t.status!=="cancelado");
+          const mesInc   = mesATxs.filter(t=>t.type==="income" ).reduce((s,t)=>s+t.amount,0);
+          const mesExp   = mesATxs.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
+          const mesPend  = mesATxs.filter(t=>t.type==="expense"&&(t.status==="pendente"||t.status==="vencido")).reduce((s,t)=>s+t.amount,0);
+          const mesVenc  = mesATxs.filter(t=>t.status==="vencido").length;
+
+          // Saldo calculado (histórico completo, só pagos)
+          const allPaid  = txs.filter(t=>t.accountId===a.id&&t.status==="pago");
+          const incPago  = allPaid.filter(t=>t.type==="income" ).reduce((s,t)=>s+t.amount,0);
+          const expPago  = allPaid.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
+          const saldoAtual = a.balance + incPago - expPago;
+
           return (
             <Card key={a.id} style={{ borderLeft:`4px solid ${a.color}` }}>
+              {/* Cabeçalho */}
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 }}>
                 <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                   <div style={{ width:42, height:42, borderRadius:12, background:a.color+"22", display:"flex", alignItems:"center", justifyContent:"center" }}><Icon name="wallet" size={20} color={a.color} /></div>
-                  <div><div style={{ fontWeight:700, fontSize:15 }}>{a.name}</div><div style={{ fontSize:12, color:C.muted }}>{a.bank} · {a.type}</div></div>
+                  <div>
+                    <div style={{ fontWeight:700, fontSize:15 }}>{a.name}</div>
+                    <div style={{ fontSize:12, color:C.muted }}>{a.bank} · {a.type}</div>
+                  </div>
                 </div>
                 <div style={{ display:"flex", gap:4 }}>
                   <Btn small variant="ghost" icon="edit" onClick={()=>openEdit(a)} />
@@ -1353,33 +1381,37 @@ const Accounts = ({ accounts, txs, onAdd, onEdit, onDelete }) => {
                 </div>
               </div>
 
-              {/* Saldo atual (só pagos) */}
-              <div style={{ fontSize:10, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:2 }}>Saldo atual (pagos)</div>
-              <div style={{ fontSize:22, fontWeight:800, color:saldoAtual<0?C.red:C.text, marginBottom:8 }}>{fmt(saldoAtual)}</div>
+              {/* Saldo atual */}
+              <div style={{ fontSize:10, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:2 }}>Saldo atual</div>
+              <div style={{ fontSize:22, fontWeight:800, color:saldoAtual<0?C.red:C.text, marginBottom:12 }}>{fmt(saldoAtual)}</div>
 
-              {/* Saldo previsto (pagos + pendentes) */}
-              {(expPend > 0 || incPend > 0) && (
-                <div style={{ background:"#f0f4f8", borderRadius:8, padding:"8px 12px", marginBottom:12 }}>
-                  <div style={{ fontSize:10, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:4 }}>Saldo previsto (com pendentes)</div>
-                  <div style={{ fontSize:16, fontWeight:800, color:saldoPrevisto<0?C.red:C.primary }}>{fmt(saldoPrevisto)}</div>
-                  <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>
-                    {expPend > 0 && <span>A pagar: <span style={{color:C.red,fontWeight:600}}>{fmt(expPend)}</span></span>}
-                    {expPend > 0 && incPend > 0 && <span> · </span>}
-                    {incPend > 0 && <span>A receber: <span style={{color:C.green,fontWeight:600}}>{fmt(incPend)}</span></span>}
+              {/* Resumo do mês */}
+              <div style={{ background:"#f5f7fb", borderRadius:10, padding:"10px 12px", marginBottom:10 }}>
+                <div style={{ fontSize:10, color:C.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:8 }}>
+                  {fmtMonth(selMonth+"-01")}{selMonth>CUR_MONTH?" 🔮":""}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                  <div>
+                    <div style={{ fontSize:10, color:C.green, fontWeight:600, textTransform:"uppercase" }}>Receitas</div>
+                    <div style={{ fontSize:14, fontWeight:700, color:C.green }}>{fmt(mesInc)}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:10, color:C.red, fontWeight:600, textTransform:"uppercase" }}>Despesas</div>
+                    <div style={{ fontSize:14, fontWeight:700, color:C.red }}>{fmt(mesExp)}</div>
                   </div>
                 </div>
-              )}
-
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-                <div style={{ background:C.greenLight, borderRadius:8, padding:"8px 12px" }}>
-                  <div style={{ fontSize:10, fontWeight:600, color:C.green, textTransform:"uppercase", letterSpacing:"0.07em" }}>Entradas pagas</div>
-                  <div style={{ fontSize:14, fontWeight:700, color:C.green }}>{fmt(incPago)}</div>
-                </div>
-                <div style={{ background:C.redLight, borderRadius:8, padding:"8px 12px" }}>
-                  <div style={{ fontSize:10, fontWeight:600, color:C.red, textTransform:"uppercase", letterSpacing:"0.07em" }}>Saídas pagas</div>
-                  <div style={{ fontSize:14, fontWeight:700, color:C.red }}>{fmt(expPago)}</div>
-                </div>
               </div>
+
+              {/* A pagar no mês */}
+              {mesPend > 0 && (
+                <div style={{ background:C.redLight, borderRadius:8, padding:"8px 12px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <div>
+                    <div style={{ fontSize:10, color:C.red, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.07em" }}>A Pagar{mesVenc>0?` · ${mesVenc} vencido${mesVenc>1?"s":""}`:""}</div>
+                    <div style={{ fontSize:16, fontWeight:800, color:C.red }}>{fmt(mesPend)}</div>
+                  </div>
+                  {mesVenc > 0 && <span style={{ fontSize:18 }}>⚠️</span>}
+                </div>
+              )}
             </Card>
           );
         })}
