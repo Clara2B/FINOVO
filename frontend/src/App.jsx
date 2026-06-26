@@ -776,6 +776,58 @@ const Dashboard = ({ txs, accounts, contacts, costCenters, onNew }) => {
         )}
       </div>
 
+      {/* Contas Bancárias */}
+      <Card>
+        <h3 style={{ fontSize:15, fontWeight:700, marginBottom:14 }}>Contas Bancárias — {fmtMonth(dashMonth+"-01")}{dashMonth>CUR_MONTH?" 🔮":""}</h3>
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          {accounts.map(a => {
+            const mesTxs  = txs.filter(t=>t.accountId===a.id&&getMonth(t.date)===dashMonth&&t.status!=="cancelado");
+            const mesInc  = mesTxs.filter(t=>t.type==="income" ).reduce((s,t)=>s+t.amount,0);
+            const mesExp  = mesTxs.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
+            const mesPend = mesTxs.filter(t=>t.type==="expense"&&(t.status==="pendente"||t.status==="vencido")).reduce((s,t)=>s+t.amount,0);
+            if (mesInc===0 && mesExp===0) return null;
+            return (
+              <div key={a.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                   padding:"10px 14px", background:C.bg, borderRadius:10, gap:12, flexWrap:"wrap" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10, minWidth:140 }}>
+                  <div style={{ width:34, height:34, borderRadius:10, background:a.color+"22", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    <Icon name="wallet" size={15} color={a.color} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:700 }}>{a.name}</div>
+                    <div style={{ fontSize:11, color:C.muted }}>{a.bank} · {a.type}</div>
+                  </div>
+                </div>
+                <div style={{ display:"flex", gap:16, flexWrap:"wrap" }}>
+                  {mesInc > 0 && (
+                    <div style={{ textAlign:"right" }}>
+                      <div style={{ fontSize:10, color:C.green, fontWeight:700, textTransform:"uppercase" }}>Receitas</div>
+                      <div style={{ fontSize:13, fontWeight:700, color:C.green }}>{hideValues?"••••":fmt(mesInc)}</div>
+                    </div>
+                  )}
+                  {mesExp > 0 && (
+                    <div style={{ textAlign:"right" }}>
+                      <div style={{ fontSize:10, color:C.red, fontWeight:700, textTransform:"uppercase" }}>Despesas</div>
+                      <div style={{ fontSize:13, fontWeight:700, color:C.red }}>{hideValues?"••••":fmt(mesExp)}</div>
+                    </div>
+                  )}
+                  {mesPend > 0 && (
+                    <div style={{ textAlign:"right", background:C.redLight, borderRadius:8, padding:"4px 10px" }}>
+                      <div style={{ fontSize:10, color:C.red, fontWeight:700, textTransform:"uppercase" }}>A Pagar</div>
+                      <div style={{ fontSize:13, fontWeight:800, color:C.red }}>{hideValues?"••••":fmt(mesPend)}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          {accounts.every(a => {
+            const m = txs.filter(t=>t.accountId===a.id&&getMonth(t.date)===dashMonth&&t.status!=="cancelado");
+            return m.length===0;
+          }) && <p style={{ color:C.dim, fontSize:13 }}>Nenhum lançamento neste mês</p>}
+        </div>
+      </Card>
+
       {/* Contas do Mês + Próximos Vencimentos */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
 
