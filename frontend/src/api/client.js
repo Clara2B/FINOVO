@@ -103,4 +103,8 @@ export const api = {
   createCategory: (payload) => request("/categories", { method: "POST", body: JSON.stringify(payload) }),
   updateCategory: (id, payload) => request(`/categories/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteCategory: (id) => request(`/categories/${id}`, { method: "DELETE" }),
+  // ── Push Notifications ────────────────────────────────────────────────
+  getVapidPublicKey: () => request("/notifications/vapid-public-key"),
+  subscribePush: (subscription) => request("/notifications/subscribe", { method: "POST", body: JSON.stringify({ subscription }) }),
+  unsubscribePush: (endpoint) => request("/notifications/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint }) }),
 };

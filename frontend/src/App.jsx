@@ -1,4 +1,11 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64  = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw     = window.atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
 import * as recharts from "recharts";
 import { api } from "./api/client";
 import { useAuth } from "./context/AuthContext";
@@ -3453,6 +3460,54 @@ export default function App() {
 
   const showToast = (msg, type="success") => { setToast({msg,type}); setTimeout(()=>setToast(null),2800); };
 
+  // ── Web Push Notifications ────────────────────────────────────────────────
+  const [pushStatus,   setPushStatus]   = useState("idle"); // idle | granted | denied | unsupported
+  const [showIOSBanner, setShowIOSBanner] = useState(false);
+
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isInStandaloneMode = window.navigator.standalone === true;
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      if (isIOS && !isInStandaloneMode) setShowIOSBanner(true);
+      else setPushStatus("unsupported");
+      return;
+    }
+    // Registra o service worker
+    navigator.serviceWorker.register("/sw.js").catch(console.error);
+    // Verifica estado atual
+    if (Notification.permission === "granted") setPushStatus("granted");
+    else if (Notification.permission === "denied") setPushStatus("denied");
+  }, []);
+
+  const enablePush = async () => {
+    if (isIOS && !isInStandaloneMode) { setShowIOSBanner(true); return; }
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const { key } = await api.getVapidPublicKey();
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(key),
+      });
+      await api.subscribePush(sub.toJSON());
+      setPushStatus("granted");
+      showToast("Notificações ativadas! Você receberá alertas diários.");
+    } catch (e) {
+      console.error("push subscribe error:", e);
+      if (Notification.permission === "denied") setPushStatus("denied");
+    }
+  };
+
+  const disablePush = async () => {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) { await api.unsubscribePush(sub.endpoint); await sub.unsubscribe(); }
+      setPushStatus("idle");
+      showToast("Notificações desativadas.", "info");
+    } catch(e) { console.error(e); }
+  };
+
   // ── TX operations ─────────────────────────────────────────────────────────
   const saveTx = async (tx) => {
     const { seriesDates, ...txData } = tx;
@@ -3718,6 +3773,15 @@ export default function App() {
       <Sidebar active={page} onNav={setPage} collapsed={collapsed} onToggle={()=>setCollapsed(v=>!v)} />
 
       <div style={{ marginLeft:sideW, flex:1, display:"flex", flexDirection:"column", minHeight:"100vh", transition:"margin .2s" }}>
+
+        {/* Banner iOS — instrução para adicionar à tela inicial */}
+        {showIOSBanner && (
+          <div style={{ background:"#1c3a6b", color:"#fff", padding:"10px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap", fontSize:13 }}>
+            <span>📱 <strong>iPhone/iPad:</strong> Para receber notificações, adicione o FINOVO à tela inicial — toque em <strong>Compartilhar</strong> → <strong>"Adicionar à Tela de Início"</strong>, depois reabra o app por lá.</span>
+            <button onClick={()=>setShowIOSBanner(false)} style={{ background:"none", border:"1px solid rgba(255,255,255,.4)", borderRadius:6, color:"#fff", padding:"3px 10px", cursor:"pointer", fontSize:12, flexShrink:0 }}>Entendi</button>
+          </div>
+        )}
+
         {/* Topbar — Finovo */}
         <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"10px 28px", display:"flex", alignItems:"center", justifyContent:"space-between", position:"sticky", top:0, zIndex:50, boxShadow:"0 1px 8px rgba(15,30,61,.06)" }}>
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
@@ -3731,6 +3795,25 @@ export default function App() {
                 <span style={{ fontSize:11, fontWeight:700, color:C.red }}>{overdueCount} vencidas · {pendingCount} pendentes</span>
               </div>
             )}
+
+            {/* Botão de notificações push */}
+            {pushStatus === "unsupported" ? null : pushStatus === "denied" ? (
+              <div title="Notificações bloqueadas. Habilite nas configurações do navegador." style={{ display:"flex", alignItems:"center", gap:5, background:C.bg, borderRadius:8, padding:"5px 10px", border:`1px solid ${C.border}`, cursor:"default", opacity:.6 }}>
+                <Icon name="bell" size={13} color={C.muted} />
+                <span style={{ fontSize:11, color:C.muted }}>Bloqueado</span>
+              </div>
+            ) : pushStatus === "granted" ? (
+              <div onClick={disablePush} title="Desativar notificações" style={{ display:"flex", alignItems:"center", gap:5, background:C.greenLight, borderRadius:8, padding:"5px 10px", border:`1px solid ${C.green}44`, cursor:"pointer" }}>
+                <Icon name="bell" size={13} color={C.green} />
+                <span style={{ fontSize:11, fontWeight:600, color:C.green }}>Notificações ativas</span>
+              </div>
+            ) : (
+              <div onClick={enablePush} title="Ativar alertas de vencimento" style={{ display:"flex", alignItems:"center", gap:5, background:C.blueLight, borderRadius:8, padding:"5px 10px", border:`1px solid ${C.blue}44`, cursor:"pointer" }}>
+                <Icon name="bell" size={13} color={C.blue} />
+                <span style={{ fontSize:11, fontWeight:600, color:C.blue }}>Ativar alertas</span>
+              </div>
+            )}
+
             <Btn variant="primary" small icon="plus" onClick={()=>setModal({type:"new"})}>Novo</Btn>
             <div style={{ position:"relative" }}>
               <div

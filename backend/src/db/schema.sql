@@ -135,3 +135,16 @@ CREATE INDEX IF NOT EXISTS idx_tx_org_date   ON transactions(organization_id, da
 CREATE INDEX IF NOT EXISTS idx_tx_org_type   ON transactions(organization_id, type);
 CREATE INDEX IF NOT EXISTS idx_tx_recurrence ON transactions(recurrence_group_id);
 CREATE INDEX IF NOT EXISTS idx_tx_batch      ON transactions(import_batch_id);
+
+-- ── Push Notifications ───────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  organization_id TEXT NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+  user_id         TEXT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  endpoint        TEXT NOT NULL UNIQUE,
+  p256dh          TEXT NOT NULL,
+  auth            TEXT NOT NULL,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_push_org ON push_subscriptions(organization_id);

@@ -5,5 +5,11 @@
   ],
   "routes": [
     { "src": "/(.*)", "dest": "src/server.js" }
+  ],
+  "crons": [
+    {
+      "path": "/api/notifications/send-daily",
+      "schedule": "0 11 * * *"
+    }
   ]
 }
