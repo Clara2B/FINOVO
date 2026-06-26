@@ -652,38 +652,39 @@ const FinancialCalendar = ({ txs, costCenters, onSelectDay }) => {
 };
 //  DASHBOARD
 const Dashboard = ({ txs, accounts, contacts, costCenters, onNew }) => {
-  const [hideValues, setHideValues] = useState(false);
-  const cur = MONTHS[MONTHS.length - 1];
+  const [hideValues,  setHideValues]  = useState(false);
+  const [dashMonth,   setDashMonth]   = useState(CUR_MONTH);
+
+  // Mês atual fixo para summary cards e CC (sempre mês corrente)
+  const cur  = CUR_MONTH;
   const prev = MONTHS[MONTHS.length - 2];
   const curTxs  = txs.filter(t => getMonth(t.date) === cur);
   const prevTxs = txs.filter(t => getMonth(t.date) === prev);
-  const sum = (arr, type) => arr.filter(t=>t.type===type).reduce((s,t)=>s+t.amount,0);
+  const sum = (arr, type) => arr.filter(t=>t.type===type&&t.status!=="cancelado").reduce((s,t)=>s+t.amount,0);
   const curInc  = sum(curTxs,  "income");
   const curExp  = sum(curTxs,  "expense");
   const prevInc = sum(prevTxs, "income");
   const prevExp = sum(prevTxs, "expense");
-  const pct = (cur, prev) => prev===0 ? 0 : ((cur - prev) / prev) * 100;
+  const pct = (c, p) => p===0 ? 0 : ((c - p) / p) * 100;
 
-  const chartData = MONTHS.map(m => {
-    const mTxs = txs.filter(t => getMonth(t.date) === m);
-    return { month: fmtMonth(m+"-01"), income: sum(mTxs,"income"), expense: sum(mTxs,"expense"), balance: sum(mTxs,"income")-sum(mTxs,"expense") };
-  });
+  // "Contas do Mês" — mês navegável
+  const dashTxs   = txs.filter(t => getMonth(t.date) === dashMonth && t.status !== "cancelado");
+  const mesAPagar  = dashTxs.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
+  const mesAReceber= dashTxs.filter(t=>t.type==="income" ).reduce((s,t)=>s+t.amount,0);
+  const dashMonthIdx = BILL_MONTHS.indexOf(dashMonth);
+  const prevDashMonth = dashMonthIdx > 0 ? BILL_MONTHS[dashMonthIdx-1] : null;
+  const nextDashMonth = dashMonthIdx < BILL_MONTHS.length-1 ? BILL_MONTHS[dashMonthIdx+1] : null;
 
-  const expBycat = {};
-  curTxs.filter(t=>t.type==="expense"&&t.status!=="cancelado").forEach(t=>{ expBycat[t.category]=(expBycat[t.category]||0)+t.amount; });
-  const pieData = Object.entries(expBycat).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([name,value])=>({ name, value }));
+  const pieData   = Object.entries(
+    curTxs.filter(t=>t.type==="expense"&&t.status!=="cancelado")
+      .reduce((m,t)=>({...m,[t.category]:(m[t.category]||0)+t.amount}),{})
+  ).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([name,value])=>({name,value}));
   const pieColors = [C.primary, C.red, C.yellow, C.blue, C.green, "#e879f9"];
 
-  const upcoming = txs.filter(t => t.type==="expense" && (t.status==="pendente"||t.status==="vencido") && t.date >= tod()).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,5);
+  const upcoming = txs.filter(t => t.type==="expense" && (t.status==="pendente"||t.status==="vencido") && t.date >= tod())
+    .sort((a,b)=>a.date.localeCompare(b.date)).slice(0,5);
   const overdue  = txs.filter(t => t.status==="vencido");
-  const totalBalance = accounts.reduce((a,acc) => {
-    const accTxs = txs.filter(t=>t.accountId===acc.id&&t.status!=="cancelado");
-    const inc = accTxs.filter(t=>t.type==="income" ).reduce((s,t)=>s+t.amount,0);
-    const exp = accTxs.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
-    return a + acc.balance + inc - exp;
-  }, 0);
 
-  // Cost center summary for current month
   const ccSummary = useMemo(()=>{
     const m = {};
     curTxs.filter(t=>t.costCenterId&&t.type==="expense").forEach(t=>{ m[t.costCenterId]=(m[t.costCenterId]||0)+t.amount; });
@@ -711,35 +712,18 @@ const Dashboard = ({ txs, accounts, contacts, costCenters, onNew }) => {
         </div>
       )}
 
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
-        <SummaryCard label="Saldo Total"    value={totalBalance} icon="wallet"   color={C.orange}  colorLight={C.orangeLight} hideValue={hideValues} />
-        <SummaryCard label="Receitas (mês)" value={curInc}  change={pct(curInc,prevInc)}  icon="arrow_up" color={C.green}  colorLight={C.greenLight}  hideValue={hideValues} />
-        <SummaryCard label="Despesas (mês)" value={curExp}  change={pct(curExp,prevExp)}   icon="arrow_dn" color={C.red}    colorLight={C.redLight}    hideValue={hideValues} />
-        <SummaryCard label="Saldo do Mês"   value={curInc-curExp} icon="chart"  color={C.blue}   colorLight={C.blueLight}   hideValue={hideValues} />
+      {/* Summary cards — 3 colunas */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12 }}>
+        <SummaryCard label="Receitas (mês)" value={curInc}       change={pct(curInc,prevInc)}  icon="arrow_up" color={C.green}  colorLight={C.greenLight}  hideValue={hideValues} />
+        <SummaryCard label="Despesas (mês)" value={curExp}       change={pct(curExp,prevExp)}   icon="arrow_dn" color={C.red}    colorLight={C.redLight}    hideValue={hideValues} />
+        <SummaryCard label="Saldo do Mês"   value={curInc-curExp}                               icon="chart"    color={C.blue}   colorLight={C.blueLight}   hideValue={hideValues} />
       </div>
 
-      {/* Calendar — full width */}
+      {/* Calendário */}
       <FinancialCalendar txs={txs} costCenters={costCenters} />
 
-      {/* Charts + CC summary */}
-      <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:16 }}>
-        <Card>
-          <h3 style={{ fontSize:15, fontWeight:700, marginBottom:16 }}>Fluxo de Caixa — Últimos 6 meses</h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <AreaChart data={chartData}>
-              <defs>
-                <linearGradient id="gi" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.green} stopOpacity={0.15}/><stop offset="95%" stopColor={C.green} stopOpacity={0}/></linearGradient>
-                <linearGradient id="ge" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.red} stopOpacity={0.15}/><stop offset="95%" stopColor={C.red} stopOpacity={0}/></linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
-              <XAxis dataKey="month" tick={{ fontSize:11, fill:C.muted }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize:11, fill:C.muted }} axisLine={false} tickLine={false} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(0)}k`:v} />
-              <Tooltip formatter={(v,n)=>[fmt(v), n==="income"?"Receitas":"Despesas"]} contentStyle={{ borderRadius:8, border:`1px solid ${C.border}`, fontSize:12 }} />
-              <Area type="monotone" dataKey="income"  stroke={C.green} fill="url(#gi)" strokeWidth={2} dot={false} />
-              <Area type="monotone" dataKey="expense" stroke={C.red}   fill="url(#ge)" strokeWidth={2} dot={false} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </Card>
+      {/* Gráfico de pizza + Centro de Custo */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
         <Card>
           <h3 style={{ fontSize:15, fontWeight:700, marginBottom:14 }}>Top Gastos do Mês</h3>
           {pieData.length === 0 ? <p style={{ color:C.dim, fontSize:13 }}>Sem dados</p> : (
@@ -760,66 +744,113 @@ const Dashboard = ({ txs, accounts, contacts, costCenters, onNew }) => {
             </>
           )}
         </Card>
+
+        {ccSummary.length > 0 ? (
+          <Card>
+            <h3 style={{ fontSize:15, fontWeight:700, marginBottom:14 }}>Despesas por Centro de Custo</h3>
+            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+              {ccSummary.map(({cc,total})=>{
+                const p = curExp>0?(total/curExp*100):0;
+                return (
+                  <div key={cc.id} style={{ display:"flex", alignItems:"center", gap:12 }}>
+                    <div style={{ width:28, height:28, borderRadius:8, background:cc.color+"22", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, flexShrink:0 }}>{cc.icon}</div>
+                    <div style={{ flex:1 }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                        <span style={{ fontSize:13, fontWeight:600 }}>{cc.name}</span>
+                        <span style={{ fontSize:13, fontWeight:700, color:C.red }}>{fmt(total)}</span>
+                      </div>
+                      <div style={{ background:C.border, borderRadius:4, height:6, overflow:"hidden" }}>
+                        <div style={{ width:`${p}%`, height:"100%", background:cc.color, borderRadius:4, transition:"width .5s" }} />
+                      </div>
+                    </div>
+                    <span style={{ fontSize:11, color:C.muted, width:36, textAlign:"right" }}>{p.toFixed(0)}%</span>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        ) : (
+          <Card style={{ display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <p style={{ color:C.dim, fontSize:13, textAlign:"center" }}>Sem centros de custo no mês</p>
+          </Card>
+        )}
       </div>
 
-      {/* Cost center breakdown + accounts + upcoming */}
-      {ccSummary.length > 0 && (
-        <Card>
-          <h3 style={{ fontSize:15, fontWeight:700, marginBottom:14 }}>Despesas por Centro de Custo — {fmtMonth(cur+"-01")}</h3>
-          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-            {ccSummary.map(({cc,total})=>{
-              const pct = curExp>0?(total/curExp*100):0;
-              return (
-                <div key={cc.id} style={{ display:"flex", alignItems:"center", gap:12 }}>
-                  <div style={{ width:28, height:28, borderRadius:8, background:cc.color+"22", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, flexShrink:0 }}>{cc.icon}</div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-                      <span style={{ fontSize:13, fontWeight:600 }}>{cc.name}</span>
-                      <span style={{ fontSize:13, fontWeight:700, color:C.red }}>{fmt(total)}</span>
-                    </div>
-                    <div style={{ background:C.border, borderRadius:4, height:6, overflow:"hidden" }}>
-                      <div style={{ width:`${pct}%`, height:"100%", background:cc.color, borderRadius:4, transition:"width .5s" }} />
-                    </div>
-                  </div>
-                  <span style={{ fontSize:11, color:C.muted, width:36, textAlign:"right" }}>{pct.toFixed(0)}%</span>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      )}
-
+      {/* Contas do Mês + Próximos Vencimentos */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+
+        {/* Contas do Mês */}
         <Card>
-          <h3 style={{ fontSize:15, fontWeight:700, marginBottom:14 }}>Contas Bancárias</h3>
-          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-            {accounts.map(a=>(
-              <div key={a.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 12px", background:C.bg, borderRadius:10 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                  <div style={{ width:36, height:36, borderRadius:10, background:a.color+"22", display:"flex", alignItems:"center", justifyContent:"center" }}><Icon name="wallet" size={16} color={a.color} /></div>
-                  <div><div style={{ fontSize:13, fontWeight:600 }}>{a.name}</div><div style={{ fontSize:11, color:C.muted }}>{a.bank} · {a.type}</div></div>
-                </div>
-                <div style={{ fontSize:15, fontWeight:700, color:a.balance<0?C.red:C.text }}>{hideValues?"••••":fmt(a.balance)}</div>
-              </div>
-            ))}
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:18 }}>
+            <h3 style={{ fontSize:15, fontWeight:700 }}>Contas do Mês</h3>
+            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+              <button onClick={()=>prevDashMonth&&setDashMonth(prevDashMonth)} disabled={!prevDashMonth}
+                style={{ background:"none", border:"none", cursor:prevDashMonth?"pointer":"default",
+                         color:prevDashMonth?C.text:C.dim, fontSize:16, padding:"2px 6px", borderRadius:6,
+                         opacity:prevDashMonth?1:.3 }}>‹</button>
+              <span style={{ fontSize:12, fontWeight:700, color:C.primary, minWidth:80, textAlign:"center" }}>
+                {fmtMonth(dashMonth+"-01")}{dashMonth > CUR_MONTH ? " 🔮" : ""}
+              </span>
+              <button onClick={()=>nextDashMonth&&setDashMonth(nextDashMonth)} disabled={!nextDashMonth}
+                style={{ background:"none", border:"none", cursor:nextDashMonth?"pointer":"default",
+                         color:nextDashMonth?C.text:C.dim, fontSize:16, padding:"2px 6px", borderRadius:6,
+                         opacity:nextDashMonth?1:.3 }}>›</button>
+            </div>
           </div>
+
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+            <div style={{ background:C.redLight, borderRadius:12, padding:"16px 18px" }}>
+              <div style={{ fontSize:11, fontWeight:700, color:C.red, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:6 }}>A Pagar</div>
+              <div style={{ fontSize:22, fontWeight:800, color:C.red }}>{hideValues?"••••":fmt(mesAPagar)}</div>
+              <div style={{ fontSize:11, color:C.red, marginTop:4, opacity:.7 }}>
+                {dashTxs.filter(t=>t.type==="expense").length} lançamento{dashTxs.filter(t=>t.type==="expense").length!==1?"s":""}
+              </div>
+            </div>
+            <div style={{ background:C.greenLight, borderRadius:12, padding:"16px 18px" }}>
+              <div style={{ fontSize:11, fontWeight:700, color:C.green, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:6 }}>A Receber</div>
+              <div style={{ fontSize:22, fontWeight:800, color:C.green }}>{hideValues?"••••":fmt(mesAReceber)}</div>
+              <div style={{ fontSize:11, color:C.green, marginTop:4, opacity:.7 }}>
+                {dashTxs.filter(t=>t.type==="income").length} lançamento{dashTxs.filter(t=>t.type==="income").length!==1?"s":""}
+              </div>
+            </div>
+          </div>
+
+          {mesAPagar > 0 || mesAReceber > 0 ? (
+            <div style={{ marginTop:14, padding:"10px 14px", background:C.bg, borderRadius:10,
+                          display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <span style={{ fontSize:12, color:C.muted, fontWeight:600 }}>Saldo do mês</span>
+              <span style={{ fontSize:14, fontWeight:800, color:(mesAReceber-mesAPagar)>=0?C.green:C.red }}>
+                {hideValues?"••••":fmt(mesAReceber-mesAPagar)}
+              </span>
+            </div>
+          ) : (
+            <p style={{ marginTop:14, fontSize:13, color:C.dim, textAlign:"center" }}>
+              {dashMonth > CUR_MONTH ? "🔮 Nenhum lançamento previsto" : "Nenhum lançamento neste mês"}
+            </p>
+          )}
         </Card>
+
+        {/* Próximos Vencimentos */}
         <Card>
           <h3 style={{ fontSize:15, fontWeight:700, marginBottom:14 }}>Próximos Vencimentos</h3>
           {upcoming.length===0 ? <p style={{ color:C.dim, fontSize:13 }}>Nenhum vencimento próximo 🎉</p> : (
             <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-              {upcoming.map(t=>(
-                <div key={t.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"8px 12px", background:C.bg, borderRadius:8 }}>
-                  <div>
-                    <div style={{ fontSize:13, fontWeight:600 }}>{t.desc}</div>
-                    <div style={{ fontSize:11, color:C.muted }}>{fmtDate(t.date)} · {t.category}</div>
+              {upcoming.map(t=>{
+                const accName = accounts.find(a=>a.id===t.accountId)?.name || "Sem conta definida";
+                return (
+                  <div key={t.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                       padding:"10px 12px", background:C.bg, borderRadius:8, gap:8 }}>
+                    <div style={{ minWidth:0, flex:1 }}>
+                      <div style={{ fontSize:13, fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{t.desc}</div>
+                      <div style={{ fontSize:11, color:C.muted, marginTop:1 }}>{fmtDate(t.date)} · {accName}</div>
+                    </div>
+                    <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:3, flexShrink:0 }}>
+                      <span style={{ fontSize:14, fontWeight:700, color:C.red }}>{fmt(t.amount)}</span>
+                      <Badge status={t.status} />
+                    </div>
                   </div>
-                  <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:3 }}>
-                    <span style={{ fontSize:14, fontWeight:700, color:C.red }}>{fmt(t.amount)}</span>
-                    <Badge status={t.status} />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </Card>
