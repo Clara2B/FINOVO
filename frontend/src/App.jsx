@@ -3504,16 +3504,22 @@ export default function App() {
     try {
       const reg = await navigator.serviceWorker.ready;
       const { key } = await api.getVapidPublicKey();
+      if (!key) throw new Error("Chave VAPID não disponível");
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(key),
       });
       await api.subscribePush(sub.toJSON());
       setPushStatus("granted");
-      showToast("Notificações ativadas! Você receberá alertas diários.");
+      showToast("Notificações ativadas! Você receberá alertas diários às 8h.");
     } catch (e) {
       console.error("push subscribe error:", e);
-      if (Notification.permission === "denied") setPushStatus("denied");
+      if (Notification.permission === "denied") {
+        setPushStatus("denied");
+        showToast("Notificações bloqueadas. Habilite nas configurações do navegador.", "info");
+      } else {
+        showToast("Erro ao ativar notificações: " + (e.message || e), "info");
+      }
     }
   };
 
