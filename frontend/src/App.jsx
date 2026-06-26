@@ -3468,16 +3468,35 @@ export default function App() {
   const isInStandaloneMode = window.navigator.standalone === true;
 
   useEffect(() => {
-    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
-      if (isIOS && !isInStandaloneMode) setShowIOSBanner(true);
-      else setPushStatus("unsupported");
+    const hasSW  = "serviceWorker" in navigator;
+    const hasPush = "PushManager" in window;
+    const hasNotif = "Notification" in window;
+
+    if (isIOS && !isInStandaloneMode) {
+      setShowIOSBanner(true);
+      setPushStatus("unsupported");
+      return;
+    }
+    if (!hasSW || !hasPush || !hasNotif) {
+      setPushStatus("unsupported");
       return;
     }
     // Registra o service worker
     navigator.serviceWorker.register("/sw.js").catch(console.error);
     // Verifica estado atual
-    if (Notification.permission === "granted") setPushStatus("granted");
-    else if (Notification.permission === "denied") setPushStatus("denied");
+    const perm = Notification.permission;
+    if (perm === "granted") {
+      // Confirma que existe subscription ativa
+      navigator.serviceWorker.ready.then(reg =>
+        reg.pushManager.getSubscription().then(sub => {
+          setPushStatus(sub ? "granted" : "idle");
+        })
+      ).catch(() => setPushStatus("idle"));
+    } else if (perm === "denied") {
+      setPushStatus("denied");
+    } else {
+      setPushStatus("idle");
+    }
   }, []);
 
   const enablePush = async () => {
@@ -3827,7 +3846,7 @@ export default function App() {
         </div>
 
         {/* Page content */}
-        <main style={{ flex:1, padding:"28px 32px", maxWidth:1200 }}>
+        <main style={{ flex:1, padding:"28px 32px", maxWidth:1200, width:"100%", margin:"0 auto" }}>
           {page==="dashboard"   && <Dashboard txs={txs} accounts={accounts} contacts={contacts} costCenters={costCenters} onNew={()=>setModal({type:"new"})} />}
           {page==="bills"       && <Bills txs={txs} accounts={accounts} contacts={contacts} costCenters={costCenters} onAdd={()=>setModal({type:"new"})} onEdit={handleEdit} onDelete={deleteTx} onMarkPaid={markPaid} onBulkEdit={bulkEditTxs} onDuplicate={duplicateTx} />}
           {page==="cashflow"    && <Cashflow txs={txs} />}
