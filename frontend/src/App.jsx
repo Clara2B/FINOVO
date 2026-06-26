@@ -469,7 +469,7 @@ const TxForm = ({ initial, accounts, contacts, onSave, onClose }) => {
   );
 };
 //  FINANCIAL CALENDAR
-const FinancialCalendar = ({ txs, costCenters, onSelectDay }) => {
+const FinancialCalendar = ({ txs, costCenters, accounts, onSelectDay }) => {
   const [calYear,  setCalYear]  = useState(today.getFullYear());
   const [calMonth, setCalMonth] = useState(today.getMonth()); // 0-based
   const [selDay,   setSelDay]   = useState(null);
@@ -513,7 +513,10 @@ const FinancialCalendar = ({ txs, costCenters, onSelectDay }) => {
   const mInc = mTxs.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount,0);
   const mExp = mTxs.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
 
-  const selTxs = selDay ? (dayMap[selDay]||[]) : [];
+  const selTxs = selDay ? (dayMap[selDay]||[]).map(t=>({
+    ...t,
+    accountName: (accounts||[]).find(a=>a.id===t.accountId)?.name || t.category,
+  })) : [];
 
   return (
     <Card style={{ padding:0, overflow:"hidden" }}>
@@ -550,103 +553,128 @@ const FinancialCalendar = ({ txs, costCenters, onSelectDay }) => {
         </div>
       </div>
 
-      <div style={{ display:"grid", gridTemplateColumns:"1fr auto" }}>
-        {/* Grid */}
-        <div style={{ padding:16 }}>
-          {/* Weekday headers */}
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", marginBottom:6 }}>
-            {WDAYS.map(w=>(
-              <div key={w} style={{ textAlign:"center", fontSize:11, fontWeight:700, color:C.muted, padding:"0 0 6px", letterSpacing:"0.05em" }}>{w}</div>
-            ))}
-          </div>
-          {/* Days grid */}
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:3 }}>
-            {/* Empty cells */}
-            {Array.from({length:firstDay}).map((_,i)=><div key={"e"+i} />)}
-            {/* Day cells */}
-            {Array.from({length:daysInMonth}).map((_,i)=>{
-              const day = i+1;
-              const dateStr = `${calYear}-${String(calMonth+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
-              const txList  = dayMap[day];
-              const dotColor= getDayColor(txList);
-              const isToday = dateStr===todayStr;
-              const isSel   = selDay===day;
-              const expAmt  = txList?.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0)||0;
-              const incAmt  = txList?.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount,0)||0;
-              const hasPend = txList?.some(t=>t.status==="pendente"||t.status==="vencido");
-
-              return (
-                <div key={day}
-                  onClick={()=>setSelDay(isSel?null:day)}
-                  style={{
-                    borderRadius:10,
-                    padding:"6px 4px",
-                    cursor:txList?"pointer":"default",
-                    background: isSel ? C.primary : isToday ? C.primaryLight : "transparent",
-                    border:`1px solid ${isSel?C.primary:isToday?C.primary:"transparent"}`,
-                    transition:"all .1s",
-                    minHeight:56,
-                    display:"flex", flexDirection:"column", alignItems:"center", gap:2,
-                    position:"relative",
-                  }}>
-                  {/* Pulse ring for overdue */}
-                  {txList?.some(t=>t.status==="vencido") && !isSel && (
-                    <div style={{ position:"absolute", inset:-2, borderRadius:12, border:`2px solid ${C.red}`, animation:"pulse 2s infinite", pointerEvents:"none" }} />
-                  )}
-                  <span style={{ fontSize:13, fontWeight: isToday||isSel ? 800 : txList?600:400, color: isSel?"#fff":isToday?C.primary:txList?C.text:C.dim }}>
-                    {day}
-                  </span>
-                  {txList && (
-                    <>
-                      <div style={{ width:6, height:6, borderRadius:"50%", background:isSel?"rgba(255,255,255,.8)":dotColor||C.primary, flexShrink:0 }} />
-                      {expAmt>0 && <span style={{ fontSize:9, fontWeight:700, color:isSel?"rgba(255,255,255,.85)":C.red, lineHeight:1 }}>-{(expAmt/1000).toFixed(1)}k</span>}
-                      {incAmt>0 && <span style={{ fontSize:9, fontWeight:700, color:isSel?"rgba(255,255,255,.85)":C.green, lineHeight:1 }}>+{(incAmt/1000).toFixed(1)}k</span>}
-                    </>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
-          {/* Legend */}
-          <div style={{ display:"flex", gap:12, marginTop:12, flexWrap:"wrap" }}>
-            {[[C.green,"Pago"],[C.yellow,"Pendente"],[C.red,"Vencido"],[C.primary,"Misto"]].map(([c,l])=>(
-              <div key={l} style={{ display:"flex", alignItems:"center", gap:5 }}>
-                <div style={{ width:8, height:8, borderRadius:"50%", background:c }} />
-                <span style={{ fontSize:11, color:C.muted }}>{l}</span>
-              </div>
-            ))}
-          </div>
+      {/* Grid do calendário */}
+      <div style={{ padding:16 }}>
+        {/* Weekday headers */}
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", marginBottom:6 }}>
+          {WDAYS.map(w=>(
+            <div key={w} style={{ textAlign:"center", fontSize:11, fontWeight:700, color:C.muted, padding:"0 0 6px", letterSpacing:"0.05em" }}>{w}</div>
+          ))}
         </div>
+        {/* Days grid */}
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:3 }}>
+          {Array.from({length:firstDay}).map((_,i)=><div key={"e"+i} />)}
+          {Array.from({length:daysInMonth}).map((_,i)=>{
+            const day = i+1;
+            const dateStr = `${calYear}-${String(calMonth+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+            const txList  = dayMap[day];
+            const dotColor= getDayColor(txList);
+            const isToday = dateStr===todayStr;
+            const isSel   = selDay===day;
+            const expAmt  = txList?.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0)||0;
+            const incAmt  = txList?.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount,0)||0;
 
-        {/* Day detail panel */}
-        {selDay && (
-          <div style={{ width:240, borderLeft:`1px solid ${C.border}`, padding:14, display:"flex", flexDirection:"column", gap:8 }}>
-            <div style={{ fontWeight:800, fontSize:15, color:C.text }}>{String(selDay).padStart(2,"0")}/{String(calMonth+1).padStart(2,"0")}/{calYear}</div>
-            {selTxs.length===0
-              ? <p style={{ fontSize:12, color:C.dim }}>Sem lançamentos neste dia.</p>
-              : selTxs.map(t=>(
-                <div key={t.id} style={{ background:C.bg, borderRadius:9, padding:"9px 11px", borderLeft:`3px solid ${t.type==="income"?C.green:C.red}` }}>
-                  <div style={{ fontSize:12, fontWeight:700, marginBottom:3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.desc}</div>
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                    <span style={{ fontSize:13, fontWeight:800, color:t.type==="income"?C.green:C.red }}>{t.type==="income"?"+":"-"}{fmt(t.amount)}</span>
-                    <Badge status={t.status} />
+            return (
+              <div key={day}
+                onClick={()=>setSelDay(isSel?null:day)}
+                style={{
+                  borderRadius:10, padding:"6px 4px",
+                  cursor:txList?"pointer":"default",
+                  background: isSel ? C.primary : isToday ? C.primaryLight : "transparent",
+                  border:`1px solid ${isSel?C.primary:isToday?C.primary:"transparent"}`,
+                  transition:"all .1s", minHeight:56,
+                  display:"flex", flexDirection:"column", alignItems:"center", gap:2,
+                  position:"relative",
+                }}>
+                {txList?.some(t=>t.status==="vencido") && !isSel && (
+                  <div style={{ position:"absolute", inset:-2, borderRadius:12, border:`2px solid ${C.red}`, animation:"pulse 2s infinite", pointerEvents:"none" }} />
+                )}
+                <span style={{ fontSize:13, fontWeight: isToday||isSel ? 800 : txList?600:400, color: isSel?"#fff":isToday?C.primary:txList?C.text:C.dim }}>
+                  {day}
+                </span>
+                {txList && (
+                  <>
+                    <div style={{ width:6, height:6, borderRadius:"50%", background:isSel?"rgba(255,255,255,.8)":dotColor||C.primary, flexShrink:0 }} />
+                    {expAmt>0 && <span style={{ fontSize:9, fontWeight:700, color:isSel?"rgba(255,255,255,.85)":C.red, lineHeight:1 }}>-{(expAmt/1000).toFixed(1)}k</span>}
+                    {incAmt>0 && <span style={{ fontSize:9, fontWeight:700, color:isSel?"rgba(255,255,255,.85)":C.green, lineHeight:1 }}>+{(incAmt/1000).toFixed(1)}k</span>}
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
+        {/* Legend */}
+        <div style={{ display:"flex", gap:12, marginTop:12, flexWrap:"wrap" }}>
+          {[[C.green,"Pago"],[C.yellow,"Pendente"],[C.red,"Vencido"],[C.primary,"Misto"]].map(([c,l])=>(
+            <div key={l} style={{ display:"flex", alignItems:"center", gap:5 }}>
+              <div style={{ width:8, height:8, borderRadius:"50%", background:c }} />
+              <span style={{ fontSize:11, color:C.muted }}>{l}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Painel de detalhes do dia — abaixo do calendário */}
+      {selDay && (
+        <div style={{ borderTop:`1px solid ${C.border}`, padding:"14px 16px" }}>
+          <div style={{ fontWeight:800, fontSize:14, color:C.text, marginBottom:12 }}>
+            {String(selDay).padStart(2,"0")}/{String(calMonth+1).padStart(2,"0")}/{calYear}
+            <span style={{ fontSize:11, fontWeight:500, color:C.muted, marginLeft:8 }}>{selTxs.length} lançamento{selTxs.length!==1?"s":""}</span>
+          </div>
+          {selTxs.length===0
+            ? <p style={{ fontSize:12, color:C.dim }}>Sem lançamentos neste dia.</p>
+            : (
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                {/* A Pagar */}
+                <div>
+                  <div style={{ fontSize:11, fontWeight:700, color:C.red, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:8, display:"flex", justifyContent:"space-between" }}>
+                    <span>A Pagar / Despesas</span>
+                    <span>{fmt(selTxs.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0))}</span>
                   </div>
-                  <div style={{ fontSize:10, color:C.muted, marginTop:4 }}>{t.category}</div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                    {selTxs.filter(t=>t.type==="expense").length===0
+                      ? <p style={{ fontSize:12, color:C.dim }}>Nenhuma despesa</p>
+                      : selTxs.filter(t=>t.type==="expense").map(t=>(
+                        <div key={t.id} style={{ background:C.redLight, borderRadius:9, padding:"9px 11px", borderLeft:`3px solid ${C.red}` }}>
+                          <div style={{ fontSize:12, fontWeight:700, marginBottom:3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.desc}</div>
+                          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                            <span style={{ fontSize:13, fontWeight:800, color:C.red }}>{fmt(t.amount)}</span>
+                            <Badge status={t.status} />
+                          </div>
+                          <div style={{ fontSize:10, color:C.muted, marginTop:4 }}>{t.accountName || t.category}</div>
+                        </div>
+                      ))
+                    }
+                  </div>
                 </div>
-              ))
-            }
-            {selTxs.length > 0 && (
-              <div style={{ borderTop:`1px solid ${C.border}`, paddingTop:8, marginTop:4 }}>
-                <div style={{ display:"flex", justifyContent:"space-between", fontSize:11 }}>
-                  <span style={{ color:C.muted }}>Total:</span>
-                  <span style={{ fontWeight:700, color:C.red }}>{fmt(selTxs.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0))}</span>
+                {/* A Receber */}
+                <div>
+                  <div style={{ fontSize:11, fontWeight:700, color:C.green, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:8, display:"flex", justifyContent:"space-between" }}>
+                    <span>A Receber / Receitas</span>
+                    <span>{fmt(selTxs.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount,0))}</span>
+                  </div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                    {selTxs.filter(t=>t.type==="income").length===0
+                      ? <p style={{ fontSize:12, color:C.dim }}>Nenhuma receita</p>
+                      : selTxs.filter(t=>t.type==="income").map(t=>(
+                        <div key={t.id} style={{ background:C.greenLight, borderRadius:9, padding:"9px 11px", borderLeft:`3px solid ${C.green}` }}>
+                          <div style={{ fontSize:12, fontWeight:700, marginBottom:3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.desc}</div>
+                          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                            <span style={{ fontSize:13, fontWeight:800, color:C.green }}>{fmt(t.amount)}</span>
+                            <Badge status={t.status} />
+                          </div>
+                          <div style={{ fontSize:10, color:C.muted, marginTop:4 }}>{t.accountName || t.category}</div>
+                        </div>
+                      ))
+                    }
+                  </div>
                 </div>
               </div>
-            )}
-          </div>
-        )}
-      </div>
+            )
+          }
+        </div>
+      )}
     </Card>
   );
 };
@@ -720,7 +748,7 @@ const Dashboard = ({ txs, accounts, contacts, costCenters, onNew }) => {
       </div>
 
       {/* Calendário */}
-      <FinancialCalendar txs={txs} costCenters={costCenters} />
+      <FinancialCalendar txs={txs} costCenters={costCenters} accounts={accounts} />
 
       {/* Gráfico de pizza + Centro de Custo */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
