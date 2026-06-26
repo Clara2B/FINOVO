@@ -5,11 +5,13 @@ const { authenticate } = require("../middleware/auth");
 
 const router = express.Router();
 
-webpush.setVapidDetails(
-  "mailto:rodrigoprofissional07@gmail.com",
-  process.env.VAPID_PUBLIC_KEY,
-  process.env.VAPID_PRIVATE_KEY
-);
+if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails(
+    "mailto:rodrigoprofissional07@gmail.com",
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+  );
+}
 
 // Retorna a chave pública VAPID para o frontend
 router.get("/vapid-public-key", (req, res) => {
