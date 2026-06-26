@@ -778,8 +778,17 @@ const Dashboard = ({ txs, accounts, contacts, costCenters, onNew }) => {
 
       {/* Contas Bancárias */}
       <Card>
-        <h3 style={{ fontSize:15, fontWeight:700, marginBottom:14 }}>Contas Bancárias — {fmtMonth(dashMonth+"-01")}{dashMonth>CUR_MONTH?" 🔮":""}</h3>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10 }}>
+        {/* Cabeçalho com títulos fixos das colunas */}
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 120px 120px 120px", gap:8, marginBottom:8,
+                      paddingBottom:8, borderBottom:`1px solid ${C.border}` }}>
+          <div style={{ fontSize:11, fontWeight:700, color:C.muted }}>
+            Contas Bancárias — {fmtMonth(dashMonth+"-01")}{dashMonth>CUR_MONTH?" 🔮":""}
+          </div>
+          <div style={{ fontSize:10, fontWeight:700, color:C.green, textTransform:"uppercase", textAlign:"right" }}>Receitas</div>
+          <div style={{ fontSize:10, fontWeight:700, color:C.red,   textTransform:"uppercase", textAlign:"right" }}>Despesas</div>
+          <div style={{ fontSize:10, fontWeight:700, color:C.red,   textTransform:"uppercase", textAlign:"right" }}>A Pagar</div>
+        </div>
+        <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
           {accounts.map(a => {
             const mesTxs  = txs.filter(t=>t.accountId===a.id&&getMonth(t.date)===dashMonth&&t.status!=="cancelado");
             const mesInc  = mesTxs.filter(t=>t.type==="income" ).reduce((s,t)=>s+t.amount,0);
@@ -787,33 +796,30 @@ const Dashboard = ({ txs, accounts, contacts, costCenters, onNew }) => {
             const mesPend = mesTxs.filter(t=>t.type==="expense"&&(t.status==="pendente"||t.status==="vencido")).reduce((s,t)=>s+t.amount,0);
             if (mesInc===0 && mesExp===0) return null;
             return (
-              <div key={a.id} style={{ background:C.bg, borderRadius:10, padding:"12px 14px",
+              <div key={a.id} style={{ display:"grid", gridTemplateColumns:"1fr 120px 120px 120px", gap:8,
+                   alignItems:"center", padding:"8px 10px", background:C.bg, borderRadius:9,
                    borderLeft:`3px solid ${a.color}` }}>
-                {/* Nome da conta */}
-                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
                   <div style={{ width:28, height:28, borderRadius:8, background:a.color+"22", display:"flex",
                        alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                     <Icon name="wallet" size={13} color={a.color} />
                   </div>
                   <div style={{ minWidth:0 }}>
-                    <div style={{ fontSize:12, fontWeight:700, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{a.name}</div>
-                    <div style={{ fontSize:10, color:C.muted }}>{a.bank} · {a.type}</div>
+                    <div style={{ fontSize:13, fontWeight:700, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{a.name}</div>
+                    <div style={{ fontSize:11, color:C.muted }}>{a.bank} · {a.type}</div>
                   </div>
                 </div>
-                {/* Valores em 3 colunas fixas */}
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:4 }}>
-                  <div>
-                    <div style={{ fontSize:9, color:C.green, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.05em" }}>Receitas</div>
-                    <div style={{ fontSize:12, fontWeight:700, color:mesInc>0?C.green:C.dim }}>{hideValues?"••••":fmt(mesInc)}</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize:9, color:C.red, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.05em" }}>Despesas</div>
-                    <div style={{ fontSize:12, fontWeight:700, color:mesExp>0?C.red:C.dim }}>{hideValues?"••••":fmt(mesExp)}</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize:9, color:C.red, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.05em" }}>A Pagar</div>
-                    <div style={{ fontSize:12, fontWeight:800, color:mesPend>0?C.red:C.dim }}>{hideValues?"••••":fmt(mesPend)}</div>
-                  </div>
+                <div style={{ textAlign:"right", fontSize:13, fontWeight:700, color:mesInc>0?C.green:C.dim }}>
+                  {hideValues?"••••":fmt(mesInc)}
+                </div>
+                <div style={{ textAlign:"right", fontSize:13, fontWeight:700, color:mesExp>0?C.red:C.dim }}>
+                  {hideValues?"••••":fmt(mesExp)}
+                </div>
+                <div style={{ textAlign:"right", fontSize:13, fontWeight:800,
+                     color:mesPend>0?C.red:C.dim,
+                     background:mesPend>0?C.redLight:"transparent",
+                     borderRadius:6, padding:mesPend>0?"3px 8px":"0" }}>
+                  {hideValues?"••••":fmt(mesPend)}
                 </div>
               </div>
             );
