@@ -1,7 +1,7 @@
 const express = require("express");
 const webpush = require("web-push");
 const pool    = require("../db/pool");
-const { authenticate } = require("../middleware/auth");
+const { requireAuth: authenticate } = require("../middleware/auth");
 
 const router = express.Router();
 
