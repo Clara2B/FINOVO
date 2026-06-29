@@ -1959,61 +1959,200 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
     setDone({ imported: result.imported, duplicates: result.duplicates, skipped: rows.filter(r=>!r.keep).length });
   };
 
+  // ── PDF: carrega PDF.js dinamicamente ────────
+  const loadPdfJs = () => new Promise((resolve, reject) => {
+    if (window.pdfjsLib) { resolve(window.pdfjsLib); return; }
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+    s.onload = () => {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+      resolve(window.pdfjsLib);
+    };
+    s.onerror = () => reject(new Error("Falha ao carregar PDF.js"));
+    document.head.appendChild(s);
+  });
+
+  // ── Extrai texto de todas as páginas do PDF ──
+  const extractPdfText = async (file) => {
+    const pdfjsLib = await loadPdfJs();
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let fullText = "";
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      // Agrupa itens por linha (y aproximado) para reconstruir linhas corretamente
+      const items = content.items.map(it => ({
+        text: it.str,
+        x: Math.round(it.transform[4]),
+        y: Math.round(it.transform[5]),
+      }));
+      const byY = {};
+      items.forEach(it => {
+        const key = it.y;
+        if (!byY[key]) byY[key] = [];
+        byY[key].push(it);
+      });
+      const lines = Object.keys(byY)
+        .sort((a,b) => b - a)
+        .map(y => byY[y].sort((a,b) => a.x - b.x).map(it => it.text).join(" ").trim())
+        .filter(Boolean);
+      fullText += lines.join("\n") + "\n";
+    }
+    return fullText;
+  };
+
+  // ── Detecta banco e parseia transações ───────
+  const parsePdfTransactions = (text, filename) => {
+    const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+
+    // Detecta banco pelo conteúdo
+    const textLower = text.toLowerCase();
+    let bank = "Extrato";
+    if (textLower.includes("nubank"))       bank = "Nubank";
+    else if (textLower.includes("banco xp") || textLower.includes("xp s.a")) bank = "Banco XP";
+    else if (textLower.includes("itaú") || textLower.includes("itau"))  bank = "Itaú";
+    else if (textLower.includes("bradesco"))  bank = "Bradesco";
+    else if (textLower.includes("santander")) bank = "Santander";
+    else if (textLower.includes("inter"))     bank = "Banco Inter";
+    else if (textLower.includes("c6"))        bank = "C6 Bank";
+    else if (textLower.includes("sicredi"))   bank = "Sicredi";
+    else if (textLower.includes("btg"))       bank = "BTG";
+
+    const transactions = [];
+
+    // ── Formato Banco XP / extrato padrão ───────────────────────────────
+    // Linha: "29/06/26 às 10:11:05 Pix enviado para Alguém -R$ 8,19 R$ 241,13"
+    // ou:    "29/06/26 às 10:11:05 Pix recebido de Alguém R$ 1.000,00 R$ 5.000,00"
+    const xpPattern = /^(\d{2}\/\d{2}\/\d{2,4})(?:\s+às\s+\d{2}:\d{2}:\d{2})?\s+(.+?)\s+([-−]?R\$\s*[\d.,]+)\s+R\$\s*[\d.,]+\s*$/;
+
+    // ── Formato compacto sem hora ────────────────────────────────────────
+    // "29/06/2026 Descrição -100,00 200,00"
+    const compactPattern = /^(\d{2}\/\d{2}\/\d{2,4})\s+(.+?)\s+([-−]?[\d.,]+)\s+[-−]?[\d.,]+\s*$/;
+
+    const skipWords = ["data","descrição","descricao","valor","saldo","extrato","periodo","período",
+      "saldo anterior","saldo disponível","total","fatura","vencimento","limite","pagamento mínimo",
+      "pagamento minimo","extrato simples","importante","banco xp","av.","cnpj","atendimento"];
+
+    const parseValor = v => {
+      const s = v.replace(/[R$\s−]/g,"").replace(/\./g,"").replace(",",".");
+      return parseFloat(s) || 0;
+    };
+
+    const parseDateBR = d => {
+      const parts = d.split("/");
+      if (parts.length !== 3) return null;
+      const day = parts[0].padStart(2,"0");
+      const mon = parts[1].padStart(2,"0");
+      const yr  = parts[2].length === 2 ? "20"+parts[2] : parts[2];
+      return `${yr}-${mon}-${day}`;
+    };
+
+    // Junta linhas que são continuação (sem data no início)
+    const mergedLines = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (/^\d{2}\/\d{2}\/\d{2}/.test(line)) {
+        mergedLines.push(line);
+      } else if (mergedLines.length > 0 && line.length > 0 && !/^(data|descrição|valor|saldo)/i.test(line)) {
+        // continuação da linha anterior (descrições longas quebradas)
+        mergedLines[mergedLines.length-1] += " " + line;
+      }
+    }
+
+    for (const line of mergedLines) {
+      const lower = line.toLowerCase();
+      if (skipWords.some(w => lower.startsWith(w))) continue;
+      if (lower.length < 10) continue;
+
+      let date = null, desc = "", valor = 0;
+
+      // Tenta padrão XP
+      const m1 = line.match(xpPattern);
+      if (m1) {
+        date  = parseDateBR(m1[1]);
+        desc  = m1[2].trim();
+        valor = parseValor(m1[3]);
+      } else {
+        const m2 = line.match(compactPattern);
+        if (m2) {
+          date  = parseDateBR(m2[1]);
+          desc  = m2[2].trim();
+          valor = parseValor(m2[3]);
+          if (line.includes("-")) valor = -Math.abs(valor);
+        }
+      }
+
+      if (!date || !desc || valor === 0) continue;
+      if (skipWords.some(w => desc.toLowerCase().includes(w) && desc.length < 30)) continue;
+
+      const isIncome = valor > 0;
+      const absAmt   = Math.abs(valor);
+
+      // Categoria automática por palavras-chave
+      const dl = desc.toLowerCase();
+      let category = "Outros";
+      if (/amazon|americanas|magazine|mercado|supermercado|carrefour|atacadão|hortifruti|ifood|rappi/.test(dl)) category = "Alimentação";
+      else if (/uber|99|taxi|combustível|combustivel|posto|shell|petrobras|estacionamento/.test(dl)) category = "Transporte";
+      else if (/aluguel|condomínio|condominio|iptu|luz|energia|água|agua|gas|internet|telefone/.test(dl)) category = "Moradia";
+      else if (/farmácia|farmacia|drogaria|hospital|médico|medico|clinica|saúde|saude/.test(dl)) category = "Saúde";
+      else if (/escola|faculdade|curso|educação|educacao|livro/.test(dl)) category = "Educação";
+      else if (/netflix|spotify|disney|prime|youtube|assinatura|streaming/.test(dl)) category = "Assinaturas";
+      else if (/shopping|roupa|vestuário|vestuario|calçado/.test(dl)) category = "Vestuário";
+      else if (/bar|restaurante|lanchonete|padaria|café|cafe/.test(dl)) category = "Alimentação";
+      else if (/farmácia|farmacia/.test(dl)) category = "Saúde";
+      else if (isIncome && /salário|salario|pagamento|transferência|transferencia|pix recebido|ted recebida/.test(dl)) category = "Salário";
+
+      transactions.push({
+        id: uid(), keep: true,
+        date, desc,
+        amount: absAmt,
+        type:   isIncome ? "income" : "expense",
+        category,
+        costCenterId: "",
+        status: "pago",
+        accountId: mapAcc,
+      });
+    }
+
+    // Período extraído do texto
+    const periodMatch = text.match(/De:\s*(\d{2}\/\d{2}\/\d{4})\s+Até:\s*(\d{2}\/\d{2}\/\d{4})/);
+    const period = periodMatch ? `${periodMatch[1]} a ${periodMatch[2]}` : "";
+    const total = transactions.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
+
+    return { bank, period, total, transactions };
+  };
+
   // ── PDF: analyze ────────────────────────────
   const analyzePdf = async file => {
+    if (!file) return;
     setPdfStatus("loading"); setPdfErr(""); setFilename(file.name);
-    const b64 = await new Promise((res, rej) => {
-      const r = new FileReader();
-      r.onload  = () => res(r.result.split(",")[1]);
-      r.onerror = () => rej(new Error("Falha ao ler PDF"));
-      r.readAsDataURL(file);
-    });
     try {
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({
-          model:"claude-sonnet-4-20250514", max_tokens:4000,
-          system:`Você extrai transações de faturas/extratos bancários brasileiros.
-Retorne SOMENTE JSON válido (sem markdown):
-{"bank":"nome","period":"Mês/Ano","total":0,"transactions":[{"date":"YYYY-MM-DD","description":"desc","amount":0,"category":"Alimentação|Transporte|Moradia|Saúde|Educação|Lazer|Vestuário|Assinaturas|Outros"}]}
-Regras: amount sempre positivo; ignore linhas de saldo/pagamento mínimo/encargos; apenas compras reais.`,
-          messages:[{role:"user",content:[
-            {type:"document",source:{type:"base64",media_type:"application/pdf",data:b64}},
-            {type:"text",text:"Extraia as transações desta fatura/extrato."}
-          ]}]
-        })
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data   = await resp.json();
-      const raw    = data.content?.find(b=>b.type==="text")?.text || "";
-      const parsed = JSON.parse(raw.replace(/```json|```/g,"").trim());
-      const mapped = (parsed.transactions||[]).map(t=>({
-        id:       uid(), keep:true,
-        date:     t.date||tod(),
-        desc:     t.description||"",
-        amount:   Math.abs(parseFloat(t.amount)||0),
-        type:     itype,
-        category: CATS.includes(t.category)?t.category:"Outros",
-        costCenterId:"",
-        status:  "pago",
-        accountId: mapAcc,
-      })).filter(t=>t.amount>0&&t.desc);
-      setPdfInfo({ bank:parsed.bank, period:parsed.period, total:parsed.total });
-      setPdfRows(mapped);
+      const text   = await extractPdfText(file);
+      const result = parsePdfTransactions(text, file.name);
+      if (result.transactions.length === 0) {
+        setPdfErr("Nenhuma transação encontrada. Verifique se é um extrato bancário válido.");
+        setPdfStatus("error");
+        return;
+      }
+      setPdfInfo({ bank: result.bank, period: result.period, total: result.total });
+      setPdfRows(result.transactions);
       setPdfStatus("review");
     } catch(err) {
-      setPdfErr(err.message);
+      console.error("PDF parse error:", err);
+      setPdfErr("Erro ao ler o PDF: " + err.message);
       setPdfStatus("error");
     }
   };
 
-  const confirmPdfImport = () => {
+  const confirmPdfImport = async () => {
     const toImport = pdfRows.filter(r=>r.keep).map(r=>({
-      ...r, source:filename, contactId:"", recurrence:"none", notes:"", accountId:mapAcc,
+      ...r, source:filename, contactId:"", recurrenceGroupId:null,
+      recurrenceIndex:null, recurrenceTotal:null, notes:"",
     }));
-    const result = onImport(toImport);
-    setDone({ imported:result.imported, duplicates:result.duplicates, skipped:pdfRows.filter(r=>!r.keep).length });
+    const result = await onImport(toImport, null, filename);
+    setDone({ imported:result?.imported||toImport.length, duplicates:0, skipped:pdfRows.filter(r=>!r.keep).length });
     setPdfStatus("done");
   };
 
