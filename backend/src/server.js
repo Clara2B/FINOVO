@@ -10,6 +10,7 @@ const contactsRoutes = require("./routes/contacts");
 const costCentersRoutes = require("./routes/costCenters");
 const categoriesRoutes = require("./routes/categories");
 const notificationsRoutes = require("./routes/notifications");
+const adminRoutes         = require("./routes/admin");
 
 const app = express();
 
@@ -26,6 +27,7 @@ app.use("/api/contacts", contactsRoutes);
 app.use("/api/cost-centers", costCentersRoutes);
 app.use("/api/categories", categoriesRoutes);
 app.use("/api/notifications", notificationsRoutes);
+app.use("/api/admin",         adminRoutes);
 
 // Handler genérico de erro (fallback)
 app.use((err, req, res, next) => {

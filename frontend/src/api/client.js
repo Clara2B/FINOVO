@@ -103,6 +103,13 @@ export const api = {
   createCategory: (payload) => request("/categories", { method: "POST", body: JSON.stringify(payload) }),
   updateCategory: (id, payload) => request(`/categories/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteCategory: (id) => request(`/categories/${id}`, { method: "DELETE" }),
+  // ── Admin (super) ─────────────────────────────────────────────────────
+  getCompany:       ()          => request("/admin/company"),
+  renameCompany:    (nome)      => request("/admin/company", { method:"PATCH", body: JSON.stringify({ nome }) }),
+  adminListUsers:   ()          => request("/admin/users"),
+  adminCreateUser:  (u)         => request("/admin/users", { method:"POST", body: JSON.stringify(u) }),
+  adminUpdateUser:  (id, u)     => request(`/admin/users/${id}`, { method:"PATCH", body: JSON.stringify(u) }),
+  adminDeleteUser:  (id)        => request(`/admin/users/${id}`, { method:"DELETE" }),
   // ── Push Notifications ────────────────────────────────────────────────
   getVapidPublicKey: () => request("/notifications/vapid-public-key"),
   subscribePush: (subscription) => request("/notifications/subscribe", { method: "POST", body: JSON.stringify({ subscription }) }),

@@ -135,6 +135,7 @@ const Icon = ({ name, size = 18, color = "currentColor" }) => {
     link:      <svg width={size} height={size} fill="none" stroke={color} strokeWidth="2" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>,
     unlink:    <svg width={size} height={size} fill="none" stroke={color} strokeWidth="2" viewBox="0 0 24 24"><path d="M18.84 12.25l1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M5.17 11.75l-1.72 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71"/><line x1="8" y1="2" x2="8" y2="5"/><line x1="2" y1="8" x2="5" y2="8"/><line x1="16" y1="19" x2="16" y2="22"/><line x1="19" y1="16" x2="22" y2="16"/></svg>,
     refresh:   <svg width={size} height={size} fill="none" stroke={color} strokeWidth="2" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>,
+    settings:  <svg width={size} height={size} fill="none" stroke={color} strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
     match:     <svg width={size} height={size} fill="none" stroke={color} strokeWidth="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-6"/></svg>,
     warning:   <svg width={size} height={size} fill="none" stroke={color} strokeWidth="2" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
     copy:      <svg width={size} height={size} fill="none" stroke={color} strokeWidth="2" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>,
@@ -3341,6 +3342,166 @@ const CostCentersPage = ({ costCenters, setCostCenters, txs }) => {
     </div>
   );
 };
+//  ADMIN PAGE — acessível apenas para claracg008@gmail.com
+const TIPO_LABEL = { dono:"Dono", usuario:"Usuário" };
+const AdminPage = ({ currentUserId }) => {
+  const [company,    setCompany]    = useState(null);
+  const [nomeEdit,   setNomeEdit]   = useState("");
+  const [savingName, setSavingName] = useState(false);
+  const [users,      setUsers]      = useState([]);
+  const [modal,      setModal]      = useState(null); // null | "new" | {user}
+  const [form,       setForm]       = useState({});
+  const [loading,    setLoading]    = useState(true);
+  const [toast,      setToast2]     = useState(null);
+
+  const showMsg = (msg, ok=true) => { setToast2({msg,ok}); setTimeout(()=>setToast2(null),3000); };
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [co, us] = await Promise.all([api.getCompany(), api.adminListUsers()]);
+      setCompany(co); setNomeEdit(co.nome || ""); setUsers(us);
+    } catch(e) { showMsg(e.message||"Erro ao carregar",false); }
+    finally { setLoading(false); }
+  };
+  useEffect(()=>{ load(); },[]);
+
+  const saveName = async () => {
+    if (!nomeEdit.trim()) return;
+    setSavingName(true);
+    try {
+      await api.renameCompany(nomeEdit.trim());
+      setCompany(c=>({...c, nome:nomeEdit.trim()}));
+      showMsg("Nome da empresa atualizado!");
+    } catch(e){ showMsg(e.message||"Erro",false); }
+    finally { setSavingName(false); }
+  };
+
+  const openNew  = () => { setForm({ tipo:"usuario" }); setModal("new"); };
+  const openEdit = (u) => { setForm({ nome:u.nome, email:u.email, tipo:u.tipo, senha:"" }); setModal(u); };
+
+  const saveUser = async () => {
+    try {
+      if (modal === "new") {
+        const u = await api.adminCreateUser(form);
+        setUsers(p=>[...p, u]);
+        showMsg("Usuário criado!");
+      } else {
+        const payload = { nome:form.nome, email:form.email, tipo:form.tipo };
+        if (form.senha) payload.senha = form.senha;
+        const u = await api.adminUpdateUser(modal.id, payload);
+        setUsers(p=>p.map(x=>x.id===u.id?u:x));
+        showMsg("Usuário atualizado!");
+      }
+      setModal(null);
+    } catch(e){ showMsg(e.message||"Erro",false); }
+  };
+
+  const deleteUser = async (u) => {
+    if (!confirm(`Remover "${u.nome}"?`)) return;
+    try {
+      await api.adminDeleteUser(u.id);
+      setUsers(p=>p.filter(x=>x.id!==u.id));
+      showMsg("Usuário removido.");
+    } catch(e){ showMsg(e.message||"Erro",false); }
+  };
+
+  if (loading) return <p style={{color:C.muted,padding:20}}>Carregando...</p>;
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
+      {toast && (
+        <div style={{ position:"fixed", top:20, right:24, zIndex:999, background:toast.ok?C.green:C.red, color:"#fff", borderRadius:10, padding:"10px 18px", fontWeight:600, fontSize:13, boxShadow:"0 4px 16px rgba(0,0,0,.15)" }}>
+          {toast.msg}
+        </div>
+      )}
+
+      <div>
+        <h2 style={{ fontSize:22, fontWeight:800 }}>Administração</h2>
+        <p style={{ color:C.muted, fontSize:13 }}>Área restrita — apenas você tem acesso.</p>
+      </div>
+
+      {/* Nome da empresa */}
+      <Card>
+        <h3 style={{ fontSize:15, fontWeight:700, marginBottom:14 }}>Nome da Empresa</h3>
+        <div style={{ display:"flex", gap:10 }}>
+          <input
+            value={nomeEdit} onChange={e=>setNomeEdit(e.target.value)}
+            style={{ flex:1, border:`1px solid ${C.border}`, borderRadius:8, padding:"9px 12px", fontSize:14, fontFamily:"inherit", outline:"none" }}
+          />
+          <Btn variant="primary" onClick={saveName} disabled={savingName || nomeEdit===company?.nome}>
+            {savingName?"Salvando...":"Salvar"}
+          </Btn>
+        </div>
+        <p style={{ fontSize:11, color:C.muted, marginTop:8 }}>Este é o nome usado na tela de login (campo "Nome da empresa").</p>
+      </Card>
+
+      {/* Usuários */}
+      <Card>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+          <h3 style={{ fontSize:15, fontWeight:700 }}>Usuários ({users.length})</h3>
+          <Btn variant="primary" icon="plus" small onClick={openNew}>Novo usuário</Btn>
+        </div>
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          {users.map(u=>(
+            <div key={u.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 14px", background:C.bg, borderRadius:10, gap:12, flexWrap:"wrap" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <div style={{ width:36, height:36, borderRadius:"50%", background:`linear-gradient(135deg,${C.primary},${C.blue})`, display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", fontWeight:800, fontSize:14, flexShrink:0 }}>
+                  {(u.nome||"?").charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:700 }}>{u.nome} {u.id===currentUserId&&<span style={{fontSize:10,color:C.green,fontWeight:700}}>(você)</span>}</div>
+                  <div style={{ fontSize:11, color:C.muted }}>{u.email} · {TIPO_LABEL[u.tipo]||u.tipo}</div>
+                </div>
+              </div>
+              <div style={{ display:"flex", gap:6 }}>
+                <Btn small variant="ghost" icon="edit" onClick={()=>openEdit(u)}>Editar</Btn>
+                {u.id!==currentUserId && <Btn small variant="danger" icon="trash" onClick={()=>deleteUser(u)}>Remover</Btn>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Modal novo/editar usuário */}
+      {modal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.45)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center" }} onClick={()=>setModal(null)}>
+          <div style={{ background:C.surface, borderRadius:16, padding:28, width:380, boxShadow:"0 8px 40px rgba(0,0,0,.2)" }} onClick={e=>e.stopPropagation()}>
+            <h3 style={{ fontSize:16, fontWeight:800, marginBottom:18 }}>{modal==="new"?"Novo Usuário":"Editar Usuário"}</h3>
+            <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+              {[
+                ["Nome completo","nome","text",true],
+                ["E-mail","email","email", modal==="new"],
+                ["Senha"+(modal!=="new"?" (deixe em branco para manter)":""),"senha","password", modal==="new"],
+              ].map(([label,key,type,req])=>(
+                <div key={key}>
+                  <div style={{ fontSize:11, fontWeight:700, color:C.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:"0.06em" }}>{label}{req&&" *"}</div>
+                  <input
+                    type={type} value={form[key]||""} onChange={e=>setForm(f=>({...f,[key]:e.target.value}))}
+                    style={{ width:"100%", border:`1px solid ${C.border}`, borderRadius:8, padding:"9px 12px", fontSize:13, fontFamily:"inherit", outline:"none" }}
+                  />
+                </div>
+              ))}
+              <div>
+                <div style={{ fontSize:11, fontWeight:700, color:C.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:"0.06em" }}>Tipo</div>
+                <select value={form.tipo||"usuario"} onChange={e=>setForm(f=>({...f,tipo:e.target.value}))}
+                  style={{ width:"100%", border:`1px solid ${C.border}`, borderRadius:8, padding:"9px 12px", fontSize:13, fontFamily:"inherit", background:C.surface }}>
+                  <option value="usuario">Usuário</option>
+                  <option value="dono">Dono (acesso total)</option>
+                </select>
+              </div>
+            </div>
+            <div style={{ display:"flex", gap:10, marginTop:20, justifyContent:"flex-end" }}>
+              <Btn variant="ghost" onClick={()=>setModal(null)}>Cancelar</Btn>
+              <Btn variant="primary" onClick={saveUser}>{modal==="new"?"Criar":"Salvar"}</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 //  SIDEBAR
 const NAV = [
   { id:"dashboard",    label:"Dashboard",       icon:"dashboard"  },
@@ -3354,7 +3515,9 @@ const NAV = [
   { id:"reports",      label:"Relatórios",      icon:"reports"    },
 ];
 
-const Sidebar = ({ active, onNav, collapsed, onToggle }) => (
+const SUPER_EMAIL = "claracg008@gmail.com";
+
+const Sidebar = ({ active, onNav, collapsed, onToggle, isSuper }) => (
   <div style={{ width: collapsed?64:220, background:C.sidebar, height:"100vh", position:"fixed", left:0, top:0, display:"flex", flexDirection:"column", transition:"width .2s", zIndex:100, flexShrink:0 }}>
     {/* Finovo Logo */}
     <div style={{ padding: collapsed?"14px 10px":"16px 16px", display:"flex", alignItems:"center", gap:10, borderBottom:"1px solid rgba(255,255,255,.07)", justifyContent:collapsed?"center":"flex-start", background:"rgba(0,0,0,.15)" }}>
@@ -3388,6 +3551,12 @@ const Sidebar = ({ active, onNav, collapsed, onToggle }) => (
           {!collapsed && <span>{n.label}</span>}
         </button>
       ))}
+      {isSuper && (
+        <button onClick={()=>onNav("admin")} style={{ display:"flex", alignItems:"center", gap:10, padding: collapsed?"10px 0":"10px 12px", justifyContent:collapsed?"center":"flex-start", borderRadius:8, border:"none", cursor:"pointer", transition:"all .15s", background: active==="admin" ? "rgba(242,101,34,.18)" : "transparent", color: active==="admin" ? "#f26522" : "rgba(255,255,255,.5)", width:"100%", fontFamily:"'Poppins',inherit", fontWeight:600, fontSize:12, borderLeft: active==="admin" ? "3px solid #f26522" : "3px solid transparent", marginTop:8, borderTop:"1px solid rgba(255,255,255,.07)", paddingTop:14 }}>
+          <Icon name="settings" size={17} color={active==="admin"?"#f26522":"rgba(255,255,255,.45)"} />
+          {!collapsed && <span>Administração</span>}
+        </button>
+      )}
     </nav>
 
     {/* Toggle */}
@@ -3795,7 +3964,7 @@ export default function App() {
     <div style={{ display:"flex", minHeight:"100vh", background:C.bg, fontFamily:"'Poppins','Segoe UI',sans-serif" }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&family=Montserrat:wght@400;600;700;800&display=swap'); * { box-sizing: border-box; font-family: 'Poppins', sans-serif; } ::-webkit-scrollbar{width:6px;height:6px} ::-webkit-scrollbar-track{background:transparent} ::-webkit-scrollbar-thumb{background:#c5cfdf;border-radius:3px} input[type=number]::-webkit-inner-spin-button{opacity:.5} button:focus{outline:none}`}</style>
 
-      <Sidebar active={page} onNav={setPage} collapsed={collapsed} onToggle={()=>setCollapsed(v=>!v)} />
+      <Sidebar active={page} onNav={setPage} collapsed={collapsed} onToggle={()=>setCollapsed(v=>!v)} isSuper={(user?.email||"").toLowerCase()===SUPER_EMAIL} />
 
       <div style={{ marginLeft:sideW, flex:1, display:"flex", flexDirection:"column", minHeight:"100vh", transition:"margin .2s" }}>
 
@@ -3862,6 +4031,7 @@ export default function App() {
           {page==="contacts"    && <Contacts contacts={contacts} txs={txs} onAdd={saveContact} onDelete={deleteContact} />}
           {page==="import"      && <ImportPage accounts={accounts} contacts={contacts} costCenters={costCenters} onImport={handleImport} onDeleteBatch={handleDeleteBatch} />}
           {page==="reports"     && <Reports txs={txs} accounts={accounts} contacts={contacts} costCenters={costCenters} />}
+          {page==="admin" && (user?.email||"").toLowerCase()===SUPER_EMAIL && <AdminPage currentUserId={user?.id} />}
         </main>
       </div>
 
