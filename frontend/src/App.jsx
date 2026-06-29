@@ -2004,7 +2004,17 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
   };
 
   // ── Detecta banco e parseia transações ───────
-  const parsePdfTransactions = (text, filename) => {
+  const parsePdfTransactions = (rawText, filename) => {
+    // Normaliza texto do PDF.js que insere espaços extras entre caracteres (formato XP e outros)
+    const text = rawText
+      .replace(/(\d{2})\s*\/\s*(\d{2})\s*\/\s*(\d{2,4})/g, "$1/$2/$3")   // datas
+      .replace(/(\d{1,2})\s*:\s*(\d{2})\s*:\s*(\d{2})/g, "$1:$2:$3")     // horas
+      .replace(/R\s*\$\s*/g, "R$")                                         // R$ sem espaço
+      .replace(/-\s*R\$/g, "-R$")                                          // -R$ junto
+      .replace(/(\d)\s*\.\s*(\d{3})/g, "$1.$2")                           // milhares: 1.234
+      .replace(/(\d)\s*,\s*(\d)/g, "$1,$2")                               // decimais: 8,19
+      .replace(/\s+\./g, ".");                                              // "Ltda ." → "Ltda."
+
     const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
 
     // Detecta banco pelo conteúdo
