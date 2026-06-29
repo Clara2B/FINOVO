@@ -162,7 +162,7 @@ router.post("/registrar", async (req, res) => {
 
     // Cria user espelhado (para compatibilidade com rotas existentes)
     await client.query(
-      "INSERT INTO users (id, organization_id, name, email, password_hash, role) VALUES ($1::UUID, $2::UUID, $3, $4, $5, 'admin')",
+      "INSERT INTO users (id, organization_id, name, email, password_hash, role) VALUES ($1::UUID, $2::UUID, $3, $4, $5, 'admin') ON CONFLICT DO NOTHING",
       [usuarioRes.rows[0].id, empresa.id, nomeAdmin.trim(), emailAdmin.toLowerCase().trim(), adminSenhaHash]
     );
 

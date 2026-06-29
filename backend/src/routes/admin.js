@@ -82,7 +82,7 @@ router.post("/users", async (req, res) => {
 
     // Espelha na tabela users
     await client.query(
-      "INSERT INTO users (id, organization_id, name, email, password_hash, role) VALUES ($1::UUID, $2::UUID, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING",
+      "INSERT INTO users (id, organization_id, name, email, password_hash, role) VALUES ($1::UUID, $2::UUID, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
       [u.id, req.user.organizationId, nome.trim(), email.toLowerCase().trim(), hash, tipo === "dono" ? "admin" : "member"]
     );
 

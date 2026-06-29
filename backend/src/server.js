@@ -29,6 +29,25 @@ app.use("/api/categories", categoriesRoutes);
 app.use("/api/notifications", notificationsRoutes);
 app.use("/api/admin",         adminRoutes);
 
+// Rota de migração única — remover após executar
+app.post("/api/migrate/email-unique", async (req, res) => {
+  if (req.headers["x-migrate-secret"] !== "finovo-migrate-2026") {
+    return res.status(401).json({ error: "Não autorizado" });
+  }
+  const pool = require("./db/pool");
+  const client = await pool.connect();
+  try {
+    await client.query("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key");
+    await client.query("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_org_email_unique");
+    await client.query("ALTER TABLE users ADD CONSTRAINT users_org_email_unique UNIQUE (organization_id, email)");
+    client.release();
+    res.json({ ok: true, msg: "Migração concluída." });
+  } catch(e) {
+    client.release();
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Handler genérico de erro (fallback)
 app.use((err, req, res, next) => {
   console.error("Erro não tratado:", err);
