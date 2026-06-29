@@ -2050,13 +2050,21 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
     };
 
     // Junta linhas que são continuação (sem data no início)
+    // PDF.js pode separar a mesma transação em múltiplas linhas
     const mergedLines = [];
+    // Padrão de data isolada (pode vir com hora na mesma linha ou não)
+    const dateOnlyRe = /^\d{2}\/\d{2}\/\d{2,4}$/;
+    const dateStartRe = /^\d{2}\/\d{2}\/\d{2,4}/;
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      if (/^\d{2}\/\d{2}\/\d{2}/.test(line)) {
+      if (dateStartRe.test(line)) {
         mergedLines.push(line);
-      } else if (mergedLines.length > 0 && line.length > 0 && !/^(data|descrição|valor|saldo)/i.test(line)) {
-        // continuação da linha anterior (descrições longas quebradas)
+      } else if (mergedLines.length > 0 && line.length > 0) {
+        const lower = line.toLowerCase();
+        // Não junta cabeçalhos ou linhas de separação
+        if (/^(data|descrição|valor|saldo|extrato|banco|período|cnpj)/i.test(line)) continue;
+        if (/^[-=_]{3,}/.test(line)) continue;
+        // Junta como continuação da linha anterior
         mergedLines[mergedLines.length-1] += " " + line;
       }
     }
@@ -2130,10 +2138,11 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
     setPdfStatus("loading"); setPdfErr(""); setFilename(file.name);
     try {
       const text   = await extractPdfText(file);
+      console.log("[PDF] Texto extraído (primeiros 2000 chars):\n", text.slice(0,2000));
       const result = parsePdfTransactions(text, file.name);
       if (result.transactions.length === 0) {
-        setPdfErr("Nenhuma transação encontrada. Verifique se é um extrato bancário válido.");
-        setPdfStatus("error");
+        setPdfErr("Nenhuma transação encontrada. Certifique-se de que o arquivo é um extrato bancário em PDF texto (não escaneado).");
+        setPdfStatus("idle");
         return;
       }
       setPdfInfo({ bank: result.bank, period: result.period, total: result.total });
@@ -2142,7 +2151,7 @@ const ImportPage = ({ accounts, contacts, costCenters, onImport }) => {
     } catch(err) {
       console.error("PDF parse error:", err);
       setPdfErr("Erro ao ler o PDF: " + err.message);
-      setPdfStatus("error");
+      setPdfStatus("idle");
     }
   };
 
