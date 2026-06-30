@@ -66,8 +66,8 @@ const CUR_MONTH = `${today.getFullYear()}-${String(today.getMonth() + 1).padStar
 // Default categories — replaced by dynamic user categories at runtime via window.__userCats
 const DEFAULT_CATS_EXPENSE = ["Alimentação","Transporte","Moradia","Saúde","Educação","Lazer","Vestuário","Assinaturas","Cartão de Crédito","Investimentos","Impostos","Outros"];
 const DEFAULT_CATS_INCOME  = ["Salário","Freelance","Aluguel Recebido","Dividendos","Reembolso","Venda","Outros"];
-const getCatsExpense = () => window.__userCats?.expense || DEFAULT_CATS_EXPENSE;
-const getCatsIncome  = () => window.__userCats?.income  || DEFAULT_CATS_INCOME;
+const getCatsExpense = () => [...DEFAULT_CATS_EXPENSE, ...(window.__userCats?.expense || [])];
+const getCatsIncome  = () => [...DEFAULT_CATS_INCOME,  ...(window.__userCats?.income  || [])];
 // Keep legacy const aliases updated at render time
 let CATS_EXPENSE = DEFAULT_CATS_EXPENSE;
 let CATS_INCOME  = DEFAULT_CATS_INCOME;
