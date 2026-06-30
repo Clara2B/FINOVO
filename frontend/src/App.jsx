@@ -468,10 +468,12 @@ const TxForm = ({ initial, accounts, contacts, onSave, onClose }) => {
       <Field label="Observações" half={false}><Textarea value={form.notes} onChange={e=>set("notes",e.target.value)} placeholder="Anotações opcionais..." /></Field>
       <div style={{ gridColumn:"span 2", display:"flex", gap:8, justifyContent:"flex-end", marginTop:4 }}>
         <Btn variant="ghost" onClick={onClose}>Cancelar</Btn>
-        <Btn variant="primary" icon="check" onClick={()=>{
+        <Btn variant="primary" icon="check" disabled={form._saving} onClick={()=>{
           if(!form.desc||!form.amount){ alert("Preencha descrição e valor."); return; }
+          if(form._saving) return;
+          set("_saving", true);
           onSave({ ...form, amount: parseFloat(form.amount), seriesDates });
-        }}>Salvar</Btn>
+        }}>{form._saving ? "Salvando..." : "Salvar"}</Btn>
       </div>
     </div>
   );
@@ -3892,6 +3894,8 @@ export default function App() {
       setModal(null);
     } catch (err) {
       showToast(err.message || "Erro ao salvar transação", "info");
+      // Reativa o botão em caso de erro
+      setModal(m => m ? { ...m, tx: { ...(m.tx||{}), _saving: false } } : m);
     }
   };
 
