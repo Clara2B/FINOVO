@@ -3156,11 +3156,11 @@ const CategoriesPage = ({ userCats, setUserCats }) => {
 
   const save = () => {
     if(!form.name.trim()){alert("Nome é obrigatório.");return;}
-    const allNames = [...DEFAULT_CATS_EXPENSE,...DEFAULT_CATS_INCOME,
-                     ...(userCats.expense||[]).map(c=>c.name),
-                     ...(userCats.income||[]).map(c=>c.name)];
-    const dup = allNames.some(n=>n.toLowerCase()===form.name.trim().toLowerCase()&&(!editId));
-    if(dup){alert("Categoria já existe.");return;}
+    const defaultsForType = form.type==="expense" ? DEFAULT_CATS_EXPENSE : DEFAULT_CATS_INCOME;
+    const customForType   = (userCats[form.type]||[]).map(c=>c.name);
+    const allNamesForType = [...defaultsForType, ...customForType];
+    const dup = allNamesForType.some(n=>n.toLowerCase()===form.name.trim().toLowerCase() && !editId);
+    if(dup){alert(`Categoria "${form.name}" já existe em ${form.type==="expense"?"Despesas":"Receitas"}.`);return;}
     if(editId){
       setUserCats(prev=>({...prev,[form.type]:(prev[form.type]||[]).map(c=>c.id===editId?{...form}:c)}));
       setEditId(null);
