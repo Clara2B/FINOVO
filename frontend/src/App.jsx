@@ -221,8 +221,8 @@ const PayModal = ({ tx, onConfirm, onClose }) => {
         <div style={{padding:"20px 24px",display:"flex",flexDirection:"column",gap:14}}>
           <div style={{background:C.bg,borderRadius:10,padding:"12px 16px",display:"flex",flexDirection:"column",gap:6}}>
             <div style={{fontSize:13,fontWeight:700,color:C.text}}>{tx.desc}</div>
-            <div style={{fontSize:18,fontWeight:800,color:tx.type==="income"?C.green:C.red}}>
-              {tx.type==="income"?"+":"-"}{fmt(tx.amount)}
+            <div style={{fontSize:18,fontWeight:800,color:tx.type==="income"?C.green:tx.type==="transfer"?"#6c63ff":C.red}}>
+              {tx.type==="income"?"+":tx.type==="transfer"?"⇄":"-"}{fmt(tx.amount)}
             </div>
             <div style={{fontSize:12,color:C.muted}}>Vencimento: {fmtDate(tx.date)}</div>
           </div>
@@ -362,21 +362,27 @@ const TxForm = ({ initial, accounts, contacts, onSave, onClose }) => {
   return (
     <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
       <div style={{ gridColumn:"span 2", display:"flex", gap:0, background:"#f1f3f9", borderRadius:10, padding:4 }}>
-        {["expense","income"].map(t => (
-          <button key={t} onClick={()=>{ set("type",t); set("category", t==="income"?aCI()[0]:aCE()[0]); }}
+        {[["expense","↓  Despesa"],["income","↑  Receita"],["transfer","⇄  Transferência"]].map(([t,label]) => (
+          <button key={t} onClick={()=>{ set("type",t); if(t!=="transfer") set("category", t==="income"?aCI()[0]:aCE()[0]); else set("category","Transferência"); }}
             style={{ flex:1, padding:"8px 0", borderRadius:7, border:"none", fontFamily:"inherit", fontWeight:700, fontSize:13, cursor:"pointer", transition:"all .15s",
-              background: form.type===t?(t==="income"?C.green:C.red):"transparent", color: form.type===t?"#fff":C.muted }}>
-            {t==="income" ? "↑  Receita" : "↓  Despesa"}
+              background: form.type===t?(t==="income"?C.green:t==="expense"?C.red:"#6c63ff"):"transparent",
+              color: form.type===t?"#fff":C.muted }}>
+            {label}
           </button>
         ))}
       </div>
-      <Field label="Descrição" half={false}><Input value={form.desc} onChange={e=>set("desc",e.target.value)} placeholder="Ex: Conta de luz" /></Field>
+      {form.type==="transfer" && (
+        <div style={{ gridColumn:"span 2", background:"#f0eeff", borderRadius:10, padding:"10px 14px", fontSize:13, color:"#5b50cc", fontWeight:600 }}>
+          ⇄ Transferências entre suas contas não afetam o saldo total (receitas − despesas).
+        </div>
+      )}
+      <Field label="Descrição" half={false}><Input value={form.desc} onChange={e=>set("desc",e.target.value)} placeholder={form.type==="transfer"?"Ex: Transferência para XP Investimentos":"Ex: Conta de luz"} /></Field>
       <Field label="Valor (R$)" half><Input type="number" min="0" step="0.01" value={form.amount} onChange={e=>set("amount",e.target.value)} placeholder="0,00" /></Field>
-      <Field label="Vencimento" half><Input type="date" value={form.date} onChange={e=>set("date",e.target.value)} /></Field>
+      <Field label="Data" half><Input type="date" value={form.date} onChange={e=>set("date",e.target.value)} /></Field>
       <Field label="Status" half>
         <Select value={form.status} onChange={e=>{ set("status",e.target.value); if(e.target.value==="pago"&&!form.paidAt) set("paidAt",tod()); }}>
           <option value="pendente">Pendente</option>
-          <option value="pago">Pago/Recebido</option>
+          <option value="pago">Realizado</option>
           <option value="vencido">Vencido</option>
           <option value="cancelado">Cancelado</option>
         </Select>
@@ -386,16 +392,26 @@ const TxForm = ({ initial, accounts, contacts, onSave, onClose }) => {
           <Input type="date" value={form.paidAt||tod()} onChange={e=>set("paidAt",e.target.value)} />
         </Field>
       )}
-      <Field label="Categoria" half>
-        <Select value={form.category} onChange={e=>set("category",e.target.value)}>
-          {cats.map(c=><option key={c}>{c}</option>)}
-        </Select>
-      </Field>
-      <Field label="Conta Bancária" half>
+      {form.type!=="transfer" && (
+        <Field label="Categoria" half>
+          <Select value={form.category} onChange={e=>set("category",e.target.value)}>
+            {cats.map(c=><option key={c}>{c}</option>)}
+          </Select>
+        </Field>
+      )}
+      <Field label={form.type==="transfer"?"Conta de Origem":"Conta Bancária"} half>
         <Select value={form.accountId} onChange={e=>set("accountId",e.target.value)}>
           {accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
         </Select>
       </Field>
+      {form.type==="transfer" && (
+        <Field label="Conta de Destino (referência)" half>
+          <Select value={form.toAccountId||""} onChange={e=>set("toAccountId",e.target.value)}>
+            <option value="">— Selecione —</option>
+            {accounts.filter(a=>a.id!==form.accountId).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
+          </Select>
+        </Field>
+      )}
       <Field label="Centro de Custo" half>
         <Select value={form.costCenterId} onChange={e=>set("costCenterId",e.target.value)}>
           <option value="">— Sem centro de custo —</option>
@@ -1194,7 +1210,7 @@ const Bills = ({ txs, accounts, contacts, costCenters, onAdd, onEdit, onDelete, 
                   </td>
                   <td style={{padding:"10px 12px"}}><span style={{fontSize:11,background:C.primaryLight,color:C.primary,borderRadius:5,padding:"2px 7px",fontWeight:600}}>{t.category}</span></td>
                   <td style={{padding:"10px 12px",fontSize:12,color:C.muted}}>{ct?.name||"—"}</td>
-                  <td style={{padding:"10px 12px",fontSize:14,fontWeight:700,color:t.type==="income"?C.green:C.text}}>{t.type==="income"?"+":"-"} {fmt(t.amount)}</td>
+                  <td style={{padding:"10px 12px",fontSize:14,fontWeight:700,color:t.type==="income"?C.green:t.type==="transfer"?"#6c63ff":C.text}}>{t.type==="income"?"+":t.type==="transfer"?"⇄":"-"} {fmt(t.amount)}</td>
                   <td style={{padding:"10px 12px"}}><Badge status={t.status} /></td>
                   <td style={{padding:"10px 12px",fontSize:12,color:t.paidAt?C.green:C.dim,whiteSpace:"nowrap"}}>{t.paidAt?fmtDate(t.paidAt):"—"}</td>
                   <td style={{padding:"10px 12px",fontSize:12,color:C.muted}}>{acc?.name.split(" ")[0]||"—"}</td>
