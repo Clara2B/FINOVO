@@ -3519,15 +3519,18 @@ const CostCentersPage = ({ costCenters, setCostCenters, txs }) => {
 //  ADMIN PAGE — acessível apenas para claracg008@gmail.com
 const TIPO_LABEL = { dono:"Dono", usuario:"Usuário" };
 const AdminPage = ({ currentUserId }) => {
-  const [company,    setCompany]    = useState(null);
-  const [nomeEdit,   setNomeEdit]   = useState("");
-  const [savingName, setSavingName] = useState(false);
-  const [users,      setUsers]      = useState([]);
-  const [modal,      setModal]      = useState(null); // null | "new" | {user}
-  const [form,       setForm]       = useState({});
-  const [loading,    setLoading]    = useState(true);
-  const [toast,      setToast2]     = useState(null);
-  const [showPwd,    setShowPwd]    = useState(false);
+  const [company,      setCompany]      = useState(null);
+  const [nomeEdit,     setNomeEdit]     = useState("");
+  const [savingName,   setSavingName]   = useState(false);
+  const [senhaEmp,     setSenhaEmp]     = useState("");
+  const [savingSenha,  setSavingSenha]  = useState(false);
+  const [showSenhaEmp, setShowSenhaEmp] = useState(false);
+  const [users,        setUsers]        = useState([]);
+  const [modal,        setModal]        = useState(null);
+  const [form,         setForm]         = useState({});
+  const [loading,      setLoading]      = useState(true);
+  const [toast,        setToast2]       = useState(null);
+  const [showPwd,      setShowPwd]      = useState(false);
 
   const showMsg = (msg, ok=true) => { setToast2({msg,ok}); setTimeout(()=>setToast2(null),3000); };
 
@@ -3550,6 +3553,16 @@ const AdminPage = ({ currentUserId }) => {
       showMsg("Nome da empresa atualizado!");
     } catch(e){ showMsg(e.message||"Erro",false); }
     finally { setSavingName(false); }
+  };
+
+  const saveSenhaEmpresa = async () => {
+    if (senhaEmp.length < 6) { showMsg("Senha precisa ter pelo menos 6 caracteres.", false); return; }
+    setSavingSenha(true);
+    try {
+      await api.renameCompany(company?.nome, senhaEmp);
+      setSenhaEmp(""); showMsg("Senha da empresa atualizada!");
+    } catch(e){ showMsg(e.message||"Erro",false); }
+    finally { setSavingSenha(false); }
   };
 
   const openNew  = () => { setForm({ tipo:"usuario" }); setModal("new"); setShowPwd(false); };
@@ -3609,6 +3622,29 @@ const AdminPage = ({ currentUserId }) => {
           </Btn>
         </div>
         <p style={{ fontSize:11, color:C.muted, marginTop:8 }}>Este é o nome usado na tela de login (campo "Nome da empresa").</p>
+      </Card>
+
+      {/* Senha da empresa */}
+      <Card>
+        <h3 style={{ fontSize:15, fontWeight:700, marginBottom:14 }}>Senha da Empresa</h3>
+        <div style={{ display:"flex", gap:10 }}>
+          <div style={{ flex:1, position:"relative" }}>
+            <input
+              type={showSenhaEmp?"text":"password"}
+              value={senhaEmp} onChange={e=>setSenhaEmp(e.target.value)}
+              placeholder="Nova senha da empresa..."
+              style={{ width:"100%", border:`1px solid ${C.border}`, borderRadius:8, padding:"9px 40px 9px 12px", fontSize:14, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}
+            />
+            <button type="button" onClick={()=>setShowSenhaEmp(v=>!v)}
+              style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:16, padding:2 }}>
+              {showSenhaEmp?"🙈":"👁️"}
+            </button>
+          </div>
+          <Btn variant="primary" onClick={saveSenhaEmpresa} disabled={savingSenha||senhaEmp.length<6}>
+            {savingSenha?"Salvando...":"Salvar"}
+          </Btn>
+        </div>
+        <p style={{ fontSize:11, color:C.muted, marginTop:8 }}>Esta é a senha usada no primeiro passo do login.</p>
       </Card>
 
       {/* Usuários */}

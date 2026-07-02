@@ -30,18 +30,26 @@ router.get("/company", async (req, res) => {
   }
 });
 
-// ── PATCH /api/admin/company — renomeia empresa ────────────────────────────
+// ── PATCH /api/admin/company — renomeia empresa e/ou altera senha ──────────
 router.patch("/company", async (req, res) => {
-  const { nome } = req.body;
-  if (!nome?.trim()) return res.status(400).json({ error: "Informe o nome." });
+  const { nome, senha } = req.body;
+  if (!nome?.trim() && !senha) return res.status(400).json({ error: "Informe nome ou senha." });
+  if (senha && senha.length < 6) return res.status(400).json({ error: "Senha precisa ter pelo menos 6 caracteres." });
 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    await client.query("UPDATE empresas      SET nome = $1 WHERE id = $2", [nome.trim(), req.user.organizationId]);
-    await client.query("UPDATE organizations SET name = $1 WHERE id = $2::UUID", [nome.trim(), req.user.organizationId]);
+    if (nome?.trim()) {
+      await client.query("UPDATE empresas      SET nome = $1 WHERE id = $2", [nome.trim(), req.user.organizationId]);
+      await client.query("UPDATE organizations SET name = $1 WHERE id = $2::UUID", [nome.trim(), req.user.organizationId]);
+    }
+    if (senha) {
+      const bcrypt = require("bcryptjs");
+      const hash = await bcrypt.hash(senha, 10);
+      await client.query("UPDATE empresas SET senha_hash = $1 WHERE id = $2", [hash, req.user.organizationId]);
+    }
     await client.query("COMMIT");
-    res.json({ ok: true, nome: nome.trim() });
+    res.json({ ok: true, nome: nome?.trim() });
   } catch (e) {
     await client.query("ROLLBACK");
     res.status(500).json({ error: e.message });

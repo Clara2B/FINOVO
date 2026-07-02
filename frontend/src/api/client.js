@@ -105,7 +105,7 @@ export const api = {
   deleteCategory: (id) => request(`/categories/${id}`, { method: "DELETE" }),
   // ── Admin (super) ─────────────────────────────────────────────────────
   getCompany:       ()          => request("/admin/company"),
-  renameCompany:    (nome)      => request("/admin/company", { method:"PATCH", body: JSON.stringify({ nome }) }),
+  renameCompany:    (nome, senha) => request("/admin/company", { method:"PATCH", body: JSON.stringify({ nome, senha }) }),
   adminListUsers:   ()          => request("/admin/users"),
   adminCreateUser:  (u)         => request("/admin/users", { method:"POST", body: JSON.stringify(u) }),
   adminUpdateUser:  (id, u)     => request(`/admin/users/${id}`, { method:"PATCH", body: JSON.stringify(u) }),
