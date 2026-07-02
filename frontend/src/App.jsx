@@ -3527,6 +3527,7 @@ const AdminPage = ({ currentUserId }) => {
   const [form,       setForm]       = useState({});
   const [loading,    setLoading]    = useState(true);
   const [toast,      setToast2]     = useState(null);
+  const [showPwd,    setShowPwd]    = useState(false);
 
   const showMsg = (msg, ok=true) => { setToast2({msg,ok}); setTimeout(()=>setToast2(null),3000); };
 
@@ -3551,8 +3552,8 @@ const AdminPage = ({ currentUserId }) => {
     finally { setSavingName(false); }
   };
 
-  const openNew  = () => { setForm({ tipo:"usuario" }); setModal("new"); };
-  const openEdit = (u) => { setForm({ nome:u.nome, email:u.email, tipo:u.tipo, senha:"" }); setModal(u); };
+  const openNew  = () => { setForm({ tipo:"usuario" }); setModal("new"); setShowPwd(false); };
+  const openEdit = (u) => { setForm({ nome:u.nome, email:u.email, tipo:u.tipo, senha:"" }); setModal(u); setShowPwd(false); };
 
   const saveUser = async () => {
     try {
@@ -3646,7 +3647,6 @@ const AdminPage = ({ currentUserId }) => {
               {[
                 ["Nome completo","nome","text",true],
                 ["E-mail","email","email", modal==="new"],
-                ["Senha"+(modal!=="new"?" (deixe em branco para manter)":""),"senha","password", modal==="new"],
               ].map(([label,key,type,req])=>(
                 <div key={key}>
                   <div style={{ fontSize:11, fontWeight:700, color:C.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:"0.06em" }}>{label}{req&&" *"}</div>
@@ -3656,6 +3656,23 @@ const AdminPage = ({ currentUserId }) => {
                   />
                 </div>
               ))}
+              <div>
+                <div style={{ fontSize:11, fontWeight:700, color:C.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:"0.06em" }}>
+                  Senha{modal==="new"?" *":" (deixe em branco para manter)"}
+                </div>
+                <div style={{ position:"relative" }}>
+                  <input
+                    type={showPwd?"text":"password"}
+                    value={form.senha||""}
+                    onChange={e=>setForm(f=>({...f,senha:e.target.value}))}
+                    style={{ width:"100%", border:`1px solid ${C.border}`, borderRadius:8, padding:"9px 40px 9px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}
+                  />
+                  <button type="button" onClick={()=>setShowPwd(v=>!v)}
+                    style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:16, padding:2, lineHeight:1 }}>
+                    {showPwd ? "🙈" : "👁️"}
+                  </button>
+                </div>
+              </div>
               <div>
                 <div style={{ fontSize:11, fontWeight:700, color:C.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:"0.06em" }}>Tipo</div>
                 <select value={form.tipo||"usuario"} onChange={e=>setForm(f=>({...f,tipo:e.target.value}))}
