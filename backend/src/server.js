@@ -29,6 +29,29 @@ app.use("/api/categories", categoriesRoutes);
 app.use("/api/notifications", notificationsRoutes);
 app.use("/api/admin",         adminRoutes);
 
+// Rota temporária — reset senha usuário claracg008 (remover após usar)
+app.post("/api/migrate/reset-user-clara", async (req, res) => {
+  if (req.headers["x-migrate-secret"] !== "finovo-migrate-2026") {
+    return res.status(401).json({ error: "Não autorizado" });
+  }
+  const bcrypt = require("bcryptjs");
+  const pool   = require("./db/pool");
+  try {
+    const hash = await bcrypt.hash("Clara2026!", 10);
+    const r = await pool.query(
+      `UPDATE usuarios SET senha_hash = $1
+       WHERE LOWER(email) = 'claracg008@gmail.com'
+         AND empresa_id = (SELECT id FROM empresas WHERE LOWER(nome) = 'rosa allure')
+       RETURNING email, nome`,
+      [hash]
+    );
+    if (r.rowCount === 0) return res.status(404).json({ error: "Usuário não encontrado na Rosa Allure." });
+    res.json({ ok: true, usuario: r.rows[0], msg: "Senha redefinida para: Clara2026!" });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Rota temporária — reset senha Rosa Allure (remover após usar)
 app.post("/api/migrate/reset-rosa-allure", async (req, res) => {
   if (req.headers["x-migrate-secret"] !== "finovo-migrate-2026") {
