@@ -29,6 +29,26 @@ app.use("/api/categories", categoriesRoutes);
 app.use("/api/notifications", notificationsRoutes);
 app.use("/api/admin",         adminRoutes);
 
+// Rota temporária — reset senha Rosa Allure (remover após usar)
+app.post("/api/migrate/reset-rosa-allure", async (req, res) => {
+  if (req.headers["x-migrate-secret"] !== "finovo-migrate-2026") {
+    return res.status(401).json({ error: "Não autorizado" });
+  }
+  const bcrypt = require("bcryptjs");
+  const pool   = require("./db/pool");
+  try {
+    const hash = await bcrypt.hash("RosaAllure2026", 10);
+    const r = await pool.query(
+      "UPDATE empresas SET senha_hash = $1 WHERE LOWER(nome) = 'rosa allure' RETURNING nome",
+      [hash]
+    );
+    if (r.rowCount === 0) return res.status(404).json({ error: "Empresa não encontrada." });
+    res.json({ ok: true, empresa: r.rows[0].nome, msg: "Senha redefinida para: RosaAllure2026" });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Rota de migração única — remover após executar
 app.post("/api/migrate/email-unique", async (req, res) => {
   if (req.headers["x-migrate-secret"] !== "finovo-migrate-2026") {
